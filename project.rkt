@@ -3,20 +3,33 @@
 option problem_type temporal
 option max_tracelength 14 
 
+/* ######################### */
+/*          SIGS             */
+/* ######################### */
+//safety and liveness for the scheduler -> all procs get turn 
+//custom visualiser not mandatory but would be good -> upto your view on how sterling is looking 
+
+
+
 abstract sig State {}
 one sig RUNNABLE extends State {}
 one sig FREE extends State {}
 one sig BLOCKED extends State {}
 one sig BROKEN extends State {}
 
+/*
+Add scheduler sig later
+- schedules when processes are allowed to run
+- when the process is running it may execute a move
+*/
+sig Bool {}
 
 // CHOICES: If/how to represent data in a page -- boolean flag, actual data, nothing?
 // address field and next field? 
 sig Page {
     address : one Int,
     next : lone Page
-    //before : lone Page
-    //var data : lone Bool
+    //var allocated : lone Bool // should we have this indicator?
 }
 
 // CHOICES: Should extend Page or not?
@@ -50,6 +63,10 @@ abstract sig Process {
 one sig Kernel extends Process {}
 sig UserProcess extends Process {} 
 
+/* ######################### */
+/*           SETUP           */
+/* ######################### */
+
 // Set up the arrangement of physical memory.
 // Ensures that there is a linear next relation
 // that corresponds to addresses (addresses are in order).
@@ -77,8 +94,11 @@ pred initUserProc {
 pred initKernelProc {
     Kernel.st = RUNNABLE
     Kernel.pid = sing[0]
-    // Why ?? :( Come back to later
-   // one(Kernel.ptable)
+    no Kernel.children
+    one(Kernel.ptable) -- UNSAT
+   all p : Page - Pagetable | {
+       sum[p.address] < 3 => p.address -> p in Kernel.ptable.mapping // < 3 seems to be making lots of assumptions ab memory layout...
+   }
 } 
 
 // Initial state requirements for the processes
@@ -95,14 +115,65 @@ pred invariants {
     SetupPhysicalMemory
 }
 
+/* ######################### */
+/*          HELPERS          */
+/* ######################### */
+
+pred allocated[p: Page]{
+    //p in Pagetable.mapping.Page
+    some Pagetable.mapping.p
+}
+
+/* ######################### */
+/*           MOVES           */
+/* ######################### */
+
+/*
+- doNothing[p: Process]
+- allocateMemory[p: Process]
+- freeMemory[p: Process, adr: Int]
+*/
+
+pred doNothing[p: Process]{
+    p.pid' = p.pid
+    p.ptable' = p.ptable
+    p.st' = p.st
+    p.children' = p.children
+}
+
+pred allocateMemory[p: Process, adr: Int]{
+    mapping' = mapping + adr->//some non-allocated page
+    pid' = pid
+    st = st'
+    children = children'
+}
+
+pred freeMemory[p: Process, adr: Int]{
+    pid' = pid
+    st = st'
+    children = children'
+    once allocateMemory[p, adr]
+    mapping' = mapping - adr->p.ptable.mapping[adr]
+}
+
 pred moves { 
+    always {
     
+    }
 }
 
 pred traces { 
     initialState
     always(invariants)
 }
-// run {some(Pagetable) and some(Page)}
 
-run{traces} for exactly 4 Page , exactly 4 UserProcess ,4 Int
+// run {some(Pagetable) and some(Page)}
+run{traces} for exactly 1 Pagetable, exactly 4 Page, exactly 4 UserProcess, 4 Int
+
+/* ######################### */
+/*       VERIFICATION        */
+/* ######################### */
+
+pred isolation {
+    
+}

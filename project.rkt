@@ -8,6 +8,8 @@ option max_tracelength 14
 /* ######################### */
 //safety and liveness for the scheduler -> all procs get turn 
 //custom visualiser not mandatory but would be good -> upto your view on how sterling is looking 
+//To DO : 
+Make sure init is working 
 
 
 

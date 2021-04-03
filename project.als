@@ -9,8 +9,7 @@ option max_tracelength 14
 //safety and liveness for the scheduler -> all procs get turn 
 //custom visualiser not mandatory but would be good -> upto your view on how sterling is looking 
 //To DO : 
-Make sure init is working 
-
+// Make sure init is working 
 
 
 abstract sig State {}
@@ -24,6 +23,7 @@ Add scheduler sig later
 - schedules when processes are allowed to run
 - when the process is running it may execute a move
 */
+
 sig Bool {}
 
 // CHOICES: If/how to represent data in a page -- boolean flag, actual data, nothing?
@@ -49,7 +49,7 @@ sig Page {
 // First in relation: Int vs. Address sig for virtual memory?
 // Second in relation: Page vs. Int sig for physical memory? 
 sig Pagetable extends Page {
-    mapping : set Int -> Page // Int -> Page or Int -> Int ?
+    var mapping : set Int -> Page // Int -> Page or Int -> Int ?
 }
 
 abstract sig Process {
@@ -98,9 +98,10 @@ pred initKernelProc {
     Kernel.pid = sing[0]
     no Kernel.children
     one(Kernel.ptable) -- UNSAT
-   all p : Page - Pagetable | {
-       sum[p.address] < 3 => p.address -> p in Kernel.ptable.mapping // < 3 seems to be making lots of assumptions ab memory layout...
-   }
+    all p : Page - Pagetable | {
+        sum[p.address] < 3 => p.address -> p in Kernel.ptable.mapping // < 3 seems to be making lots of assumptions ab memory layout...
+        sum[p.address] > 3 => not (p.address -> p in Kernel.ptable.mapping)
+    }
 } 
 
 // Initial state requirements for the processes
@@ -115,15 +116,25 @@ pred invariants {
     // max amount of data in a page (if modelling that)
     // max number of mappings in a pagetable (if modelling that)
     SetupPhysicalMemory
+    all i: Int{
+        i in Page.address => sum[i] >= 0 // physical addresses
+        i in Process.pid => sum[i] >= 0 // pids
+        i in Pagetable.mapping.Page => sum[i] >= 0 // Virtual addresses
+    }
 }
 
 /* ######################### */
 /*          HELPERS          */
 /* ######################### */
 
+// Checks if a physical page is in use
 pred allocated[p: Page]{
-    //p in Pagetable.mapping.Page
-    some Pagetable.mapping.p
+    p in Process.ptable or some Pagetable.mapping.p 
+}
+
+// Checks if a virtual address of a particular process is in use
+pred virtualAllocated[p: Process, addr: Int]{
+    some p.ptable.mapping[addr]
 }
 
 /* ######################### */
@@ -144,28 +155,45 @@ pred doNothing[p: Process]{
 }
 
 pred allocateMemory[p: Process, adr: Int]{
-    mapping' = mapping + adr->//some non-allocated page
+    p.st = RUNNABLE
+    one page: Page {
+        not page in Pagetable 
+        not allocated[page]
+        p.ptable.mapping' = p.ptable.mapping + adr->page
+    }
     pid' = pid
     st = st'
     children = children'
 }
 
 pred freeMemory[p: Process, adr: Int]{
+    p.st = RUNNABLE
     pid' = pid
     st = st'
     children = children'
-    once allocateMemory[p, adr]
-    mapping' = mapping - adr->p.ptable.mapping[adr]
+    // once allocateMemory[p, adr] **This should be a property we verify about the system not enforce**
+    virtualAllocated[p, adr]
+    p.ptable.mapping' = p.ptable.mapping - adr->Page
+
 }
 
 pred moves { 
-    always {
-    
+    {
+        some p1: Process {
+            one adr: Int {
+                not virtualAllocated[p1, adr]
+                allocateMemory[p1, adr] or freeMemory[p1 , adr]
+            }
+            all p2: Process {
+                p1 != p2 => doNothing[p2]
+            }
+        }
     }
 }
 
 pred traces { 
     initialState
+    moves
     always(invariants)
 }
 

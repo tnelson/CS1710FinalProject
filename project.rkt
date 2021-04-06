@@ -1,23 +1,26 @@
 #lang forge
 
+//Use electrum mode with trace length 14
 option problem_type temporal
 option max_tracelength 14 
 
 /* ######################### */
 /*          SIGS             */
 /* ######################### */
+//Notes : 
 //safety and liveness for the scheduler -> all procs get turn 
 //custom visualiser not mandatory but would be good -> upto your view on how sterling is looking 
 //To DO : 
 // Make sure init is working 
 
-
+// The state of a given process
 abstract sig State {}
 one sig RUNNABLE extends State {}
 one sig FREE extends State {}
 one sig BLOCKED extends State {}
 one sig BROKEN extends State {}
 
+// Page permissions
 abstract sig Permission {}
 one sig READ extends Permission {} // read/view only 
 one sig WRITE extends Permission {} // read and write 
@@ -140,15 +143,17 @@ pred invariants {
         i in Process.pid => sum[i] >= 0 // pids
         i in Pagetable.mapping.Page => sum[i] >= 0 // Virtual addresses
     }
+    //Kernel Pagetable shouldn't change!
+    (Kernel.ptable)' = Kernel.ptable
 }
 
 /* ######################### */
 /*          HELPERS          */
 /* ######################### */
 
-// Checks if a physical page is in use
+// Checks if a physical page is in use by a UserProcess
 pred allocated[p: Page]{
-    some Pagetable.mapping.p 
+    some UserProcess.ptable.mapping.p 
 }
 
 // Checks if a virtual address of a particular process is in use
@@ -170,20 +175,24 @@ For running processes
 
 pred initializeProcess[p: Process] {
     p.st = FREE
-    st' = st + p->RUNNABLE
+    (p.st)' = RUNNABLE  //Rewriting this line from st' = st + .. to (p.st)' solved the UNSAT problem
     pid' = pid
     children' = children
+    one((p.ptable'))
     // allocate 2 initial pages
+    // You need to refer to the next Page table ptable' not current one!
     some pg : Page | {
         pg.address != sing[0]
         not allocated[pg]
-        p.ptable.mapping[pg.address] = pg
-        ~(p.ptable.mapping)[pg] = pg.address
-        p.ptable.permissions[pg] = WRITE
+        (p.ptable.mapping)' = pg.address->pg
+        // ~(p.ptable.mapping)[pg] = pg.address  Why ? This seems unnecessary
+        (p.ptable.permissions)' = pg->WRITE
     }
-    #p.ptable.mapping = 2                                   // try commenting out this line
-    mapping' = mapping + p.ptable->p.ptable.mapping
-    permissions' = permissions + p.ptable->p.ptable.permissions
+    // #p.ptable.mapping = 2                                   // try commenting out this line
+     all proc : Process  - p { 
+         proc.ptable.mapping' = proc.ptable.mapping 
+         proc.ptable.permissions' = proc.ptable.permissions
+     }
 }
 
 pred allocateMemory[p: Process, adr: Int] {
@@ -203,7 +212,6 @@ pred freeMemory[p: Process, adr: Int] {
     virtualAllocated[p, adr]
     mapping' = mapping - p.ptable->adr->p.ptable.mapping[adr]
     permissions' = permissions - p.ptable->p.ptable.mapping[adr]->p.ptable.permissions[p.ptable.mapping[adr]]
-
     st' = st
     pid' = pid
     children' = children
@@ -213,19 +221,21 @@ pred freeMemory[p: Process, adr: Int] {
 pred moves { 
     always {
         some p1: Process | one adr: Int {
-            initializeProcess[p1] or allocateMemory[p1, adr] or freeMemory[p1, adr]                     // try running with just the initializeProcess option, shouldn't be unsat
+            initializeProcess[p1]   or allocateMemory[p1, adr] or freeMemory[p1, adr]                     // try running with just the initializeProcess option, shouldn't be unsat
         }
     }
 }
 
 pred traces { 
-    initialState
-    moves
-    always(invariants)
+   initialState
+   always(invariants)
+   moves
+ 
+    
 }
 
 // run {some(Pagetable) and some(Page)}
-run{traces} for exactly 7 Page, exactly 1 UserProcess, 4 Int
+run{traces} for exactly 7 Page,exactly 3 UserProcess,4 Int
 
 /* ######################### */
 /*       VERIFICATION        */

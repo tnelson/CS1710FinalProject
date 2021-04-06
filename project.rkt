@@ -18,13 +18,15 @@ one sig FREE extends State {}
 one sig BLOCKED extends State {}
 one sig BROKEN extends State {}
 
+abstract sig Permission {}
+one sig READ extends Permission {} // read/view only 
+one sig WRITE extends Permission {} // read and write 
+
 /*
 Add scheduler sig later
 - schedules when processes are allowed to run
 - when the process is running it may execute a move
 */
-
-sig Bool {}
 
 // CHOICES: If/how to represent data in a page -- boolean flag, actual data, nothing?
 // address field and next field? 
@@ -48,8 +50,9 @@ sig Page {
 // differntiable from a page; What makes most sense from a modelling perspective?
 // First in relation: Int vs. Address sig for virtual memory?
 // Second in relation: Page vs. Int sig for physical memory? 
-sig Pagetable extends Page {
-    var mapping : set Int -> Page // Int -> Page or Int -> Int ?
+sig Pagetable {
+    var mapping : set Int -> Page, // Int -> Page or Int -> Int ?
+    var permissions: set Page -> Permission
 }
 
 abstract sig Process {
@@ -61,7 +64,6 @@ abstract sig Process {
     // registers : set register
     // threads : set Thread
 }
-
 one sig Kernel extends Process {}
 sig UserProcess extends Process {} 
 
@@ -91,23 +93,39 @@ pred initUserProc {
     pid.~pid in iden 
     no(UserProcess.ptable)
     no(children)  // enforce that we start with no children? yes... verify that a process can't have children after it's freed
+    all p: UserProcess {
+        sum[p.pid] <= #UserProcess
+    }
 }
 
 pred initKernelProc {
     Kernel.st = RUNNABLE
     Kernel.pid = sing[0]
     no Kernel.children
-    one(Kernel.ptable) -- UNSAT
-    all p : Page - Pagetable | {
-        sum[p.address] < 3 => p.address -> p in Kernel.ptable.mapping // < 3 seems to be making lots of assumptions ab memory layout...
-        sum[p.address] > 3 => not (p.address -> p in Kernel.ptable.mapping)
+    some Kernel.ptable
+    // set up the kernel pagetable's mappings (identity mapping, uses 3 pages for kernel code)
+    all p : Page | {
+        // create mapping to all physical pages (except for page 0)
+        sum[p.address] > 0 => Kernel.ptable.mapping[p.address] = p
+        some Kernel.ptable.mapping.p => ~(Kernel.ptable.mapping)[p] = p.address
+        // kernel code stored in first 3 pages (write permissions), read only otherwise
+        sum[p.address] > 0 and sum[p.address] <= 3 => Kernel.ptable.permissions[p] = WRITE
+        sum[p.address] > 3 => Kernel.ptable.permissions[p] = READ
     }
 } 
+
+pred emptyPageTables {
+    all pt: Pagetable - Kernel.ptable | {
+        no pt.mapping
+        no pt.permissions
+    }
+}
 
 // Initial state requirements for the processes
 pred initialState {
     initKernelProc
     initUserProc
+    emptyPageTables
 }
 
 pred invariants { 
@@ -116,7 +134,8 @@ pred invariants {
     // max amount of data in a page (if modelling that)
     // max number of mappings in a pagetable (if modelling that)
     SetupPhysicalMemory
-    all i: Int{
+    ptable.~ptable in iden 
+    all i: Int {
         i in Page.address => sum[i] >= 0 // physical addresses
         i in Process.pid => sum[i] >= 0 // pids
         i in Pagetable.mapping.Page => sum[i] >= 0 // Virtual addresses
@@ -129,7 +148,7 @@ pred invariants {
 
 // Checks if a physical page is in use
 pred allocated[p: Page]{
-    p in Process.ptable or some Pagetable.mapping.p 
+    some Pagetable.mapping.p 
 }
 
 // Checks if a virtual address of a particular process is in use
@@ -142,51 +161,59 @@ pred virtualAllocated[p: Process, addr: Int]{
 /* ######################### */
 
 /*
+- initialize process
+For running processes
 - doNothing[p: Process]
 - allocateMemory[p: Process]
 - freeMemory[p: Process, adr: Int]
 */
 
-pred doNothing[p: Process]{
-    p.pid' = p.pid
-    p.ptable' = p.ptable
-    p.st' = p.st
-    p.children' = p.children
-}
-
-pred allocateMemory[p: Process, adr: Int]{
-    p.st = RUNNABLE
-    one page: Page {
-        not page in Pagetable 
-        not allocated[page]
-        p.ptable.mapping' = p.ptable.mapping + adr->page
+pred initializeProcess[p: Process] {
+    p.st = FREE
+    st' = st + p->RUNNABLE
+    pid' = pid
+    children' = children
+    // allocate 2 initial pages
+    some pg : Page | {
+        pg.address != sing[0]
+        not allocated[pg]
+        p.ptable.mapping[pg.address] = pg
+        ~(p.ptable.mapping)[pg] = pg.address
+        p.ptable.permissions[pg] = WRITE
     }
-    pid' = pid
-    st = st'
-    children = children'
+    #p.ptable.mapping = 2                                   // try commenting out this line
+    mapping' = mapping + p.ptable->p.ptable.mapping
+    permissions' = permissions + p.ptable->p.ptable.permissions
 }
 
-pred freeMemory[p: Process, adr: Int]{
-    p.st = RUNNABLE
+pred allocateMemory[p: Process, adr: Int] {
+    some pg: Page {
+        not allocated[pg]
+        mapping' = mapping + p.ptable->adr->pg
+        permissions' = permissions + p.ptable->pg->WRITE // represents allocating heap memory -- writeable
+    }
+    st' = st
     pid' = pid
-    st = st'
-    children = children'
+    children' = children
+    ptable' = ptable
+}
+
+pred freeMemory[p: Process, adr: Int] {
     // once allocateMemory[p, adr] **This should be a property we verify about the system not enforce**
     virtualAllocated[p, adr]
-    p.ptable.mapping' = p.ptable.mapping - adr->Page
+    mapping' = mapping - p.ptable->adr->p.ptable.mapping[adr]
+    permissions' = permissions - p.ptable->p.ptable.mapping[adr]->p.ptable.permissions[p.ptable.mapping[adr]]
 
+    st' = st
+    pid' = pid
+    children' = children
+    ptable' = ptable
 }
 
 pred moves { 
-    {
-        some p1: Process {
-            one adr: Int {
-                not virtualAllocated[p1, adr]
-                allocateMemory[p1, adr] or freeMemory[p1 , adr]
-            }
-            all p2: Process {
-                p1 != p2 => doNothing[p2]
-            }
+    always {
+        some p1: Process | one adr: Int {
+            initializeProcess[p1] or allocateMemory[p1, adr] or freeMemory[p1, adr]                     // try running with just the initializeProcess option, shouldn't be unsat
         }
     }
 }
@@ -198,7 +225,7 @@ pred traces {
 }
 
 // run {some(Pagetable) and some(Page)}
-run{traces} for exactly 1 Pagetable, exactly 4 Page, exactly 4 UserProcess, 4 Int
+run{traces} for exactly 7 Page, exactly 1 UserProcess, 4 Int
 
 /* ######################### */
 /*       VERIFICATION        */

@@ -174,7 +174,8 @@ For running processes
 */
 
 pred initializeProcess[p: Process] {
-    p.st = FREE
+    // p.st = FREE
+    st' = st + p->RUNNABLE - p->FREE
     (p.st)' = RUNNABLE  //Rewriting this line from st' = st + .. to (p.st)' solved the UNSAT problem
     pid' = pid
     children' = children
@@ -188,7 +189,7 @@ pred initializeProcess[p: Process] {
         // ~(p.ptable.mapping)[pg] = pg.address  Why ? This seems unnecessary
         (p.ptable.permissions)' = pg->WRITE
     }
-    // #p.ptable.mapping = 2                                   // try commenting out this line
+    //  #(p.ptable.mapping') = 2                                   // try commenting out this line
      all proc : Process  - p { 
          proc.ptable.mapping' = proc.ptable.mapping 
          proc.ptable.permissions' = proc.ptable.permissions
@@ -229,7 +230,10 @@ pred moves {
 pred traces { 
    initialState
    always(invariants)
-   moves
+    one p1: UserProcess  {
+            initializeProcess[p1]   
+    }
+   //moves
  
     
 }
@@ -240,6 +244,14 @@ run{traces} for exactly 7 Page,exactly 3 UserProcess,4 Int
 /* ######################### */
 /*       VERIFICATION        */
 /* ######################### */
+
+/*
+Model working properly
+- processes never lose their pagetables
+- free processes all eventually become runnable
+Verification of important properties
+- memory isolation
+*/
 
 pred isolation {
     

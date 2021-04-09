@@ -236,9 +236,6 @@ pred moves {
 pred traces { 
    initialState
    always(invariants)
-    // one p1: UserProcess  {
-    //         initializeProcess[p1]   
-    // }
    moves
 }
 

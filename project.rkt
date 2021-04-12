@@ -60,7 +60,7 @@ sig Pagetable {
 
 abstract sig Process {
     pid : one Int,
-    var ptable : lone Pagetable,  // lone vs. one
+    var ptable : lone Pagetable,  // Simplified, now each process always has an assigned pagetable
     var st : one State, 
     var children : set Process
 
@@ -155,7 +155,7 @@ pred invariants {
 // Checks if a physical page is in use
 // in use = some process has write permissions
 pred allocated[pg: Page]{
-    pg.address = sing[0] or Process.ptable.permissions[pg] = WRITE
+    pg.address = sing[0] or (WRITE in Process.ptable.permissions[pg]) // pg can also be readable from other processes
 }
 
 // Checks if a virtual address of a particular process is in use
@@ -176,27 +176,35 @@ For running processes
 */
 
 pred initializeProcess[p: Process] {
-    // p.st = FREE
+    p.st = FREE
     st' = st + p->RUNNABLE - p->FREE
     (p.st)' = RUNNABLE  //Rewriting this line from st' = st + .. to (p.st)' solved the UNSAT problem
-    pid' = pid
     children' = children
     one((p.ptable'))
     // allocate 2 initial pages
     // You need to refer to the next Page table ptable' not current one!
-    all pg : Page | {
-        pg in p.ptable.mapping[Int]' => {
-            not allocated[pg]
-            p.ptable.mapping[pg.address]' = pg
-            ~(p.ptable.mapping)[pg]' = pg.address
-            p.ptable.permissions[pg]' = WRITE
-        } else {
-            no p.ptable.permissions[pg]'
-        }
-        
+
+    all i: Int{ // Map first two virtual addresses
+        ((sum[i] = 1) or (sum[i] = 2)) => 
+            {
+                one pg: Page | {
+                    not allocated[pg] // Not working properly for some reason
+                    p.(ptable').(permissions')[pg] = WRITE
+                    p.(ptable').(mapping')[i] = pg
+                    p.(ptable').(mapping').pg = i
+                } 
+            } else {
+                no p.ptable.mapping[i]'
+            }
     }
-    #(p.ptable.mapping') = 2                                   // try commenting out this line
+
+    all pg: Page{
+        (not (pg in p.ptable.mapping[Int]')) => no p.ptable.permissions[pg]'
+    }
+
+    #(p.(ptable').(mapping')) = 2                                   // try commenting out this line
     all proc : Process  - p { 
+        proc.ptable = proc.ptable'
         proc.ptable.mapping' = proc.ptable.mapping 
         proc.ptable.permissions' = proc.ptable.permissions
     }
@@ -209,7 +217,6 @@ pred allocateMemory[p: Process, adr: Int] {
         permissions' = permissions + p.ptable->pg->WRITE // represents allocating heap memory -- writeable
     }
     st' = st
-    pid' = pid
     children' = children
     ptable' = ptable
 }
@@ -220,7 +227,6 @@ pred freeMemory[p: Process, adr: Int] {
     mapping' = mapping - p.ptable->adr->p.ptable.mapping[adr]
     permissions' = permissions - p.ptable->p.ptable.mapping[adr]->p.ptable.permissions[p.ptable.mapping[adr]]
     st' = st
-    pid' = pid
     children' = children
     ptable' = ptable
 }
@@ -228,19 +234,27 @@ pred freeMemory[p: Process, adr: Int] {
 pred moves { 
     always {
         some p1: Process | one adr: Int {
-            initializeProcess[p1] or allocateMemory[p1, adr] or freeMemory[p1, adr]                     // try running with just the initializeProcess option, shouldn't be unsat
+            // try running with just the initializeProcess option, shouldn't be unsat
+            initializeProcess[p1] or allocateMemory[p1, adr] or freeMemory[p1, adr]
         }
     }
 }
 
+pred initP{
+    some p: Process | {initializeProcess[p]}
+}
 pred traces { 
    initialState
    always(invariants)
-   moves
+   //moves            
+   initP
+   after initP
 }
 
+//run{traces} for exactly 8 Page,exactly 3 UserProcess,4 Int
+
 // run {some(Pagetable) and some(Page)}
-//run{traces} for exactly 7 Page,exactly 3 UserProcess,4 Int
+
 
 /* ######################### */
 /*       VERIFICATION        */
@@ -257,13 +271,14 @@ Verification of important properties
 pred isolation {
     all p1, p2: Process | all pg: Page {
         p1 != p2 => {
-            not (p1.ptable.permissions[pg] = WRITE and p2.ptable.permissions[pg] = WRITE)
+            not (WRITE in p1.ptable.permissions[pg] and WRITE in p2.ptable.permissions[pg])
         }
     }
 }
 
 test expect {
-    {traces implies {always isolation}} is theorem
+    //traces is sat
+    //{traces implies {always isolation}} is theorem 
 }
 
 //run {traces and not {always isolation}}

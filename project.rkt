@@ -60,7 +60,7 @@ sig Pagetable {
 
 abstract sig Process {
     pid : one Int,
-    var ptable : lone Pagetable,  // Simplified, now each process always has an assigned pagetable
+    var ptable : lone Pagetable,  // lone vs one
     var st : one State, 
     var children : set Process
 

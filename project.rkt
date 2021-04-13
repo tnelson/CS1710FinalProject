@@ -202,7 +202,7 @@ pred initializeProcess[p: Process] {
         (not (pg in p.ptable.mapping[Int]')) => no p.ptable.permissions[pg]'
     }
 
-    #(p.(ptable').(mapping')) = 2                                   // try commenting out this line
+    #(p.(ptable').(mapping')) = 2
     all proc : Process  - p { 
         proc.ptable = proc.ptable'
         proc.ptable.mapping' = proc.ptable.mapping 
@@ -233,10 +233,11 @@ pred freeMemory[p: Process, adr: Int] {
 
 pred moves { 
     always {
-        some p1: Process | one adr: Int {
+        (some p: Process - Kernel | initializeProcess[p]) or (some p: Process - Kernel | one adr: Int { allocateMemory[p, adr] or freeMemory[p, adr] } )
+        /*some p1: Process - Kernel | one adr: Int { // Process vs. UserProcess
             // try running with just the initializeProcess option, shouldn't be unsat
             initializeProcess[p1] or allocateMemory[p1, adr] or freeMemory[p1, adr]
-        }
+        }*/
     }
 }
 
@@ -246,12 +247,12 @@ pred initP{
 pred traces { 
    initialState
    always(invariants)
-   //moves            
-   initP
-   after initP
+   moves            
+   //initP
+   //after initP
 }
 
-//run{traces} for exactly 8 Page,exactly 3 UserProcess,4 Int
+//run{traces} for exactly 8 Page, exactly 3 UserProcess, 4 Int
 
 // run {some(Pagetable) and some(Page)}
 
@@ -266,7 +267,18 @@ Model working properly
 - free processes all eventually become runnable
 Verification of important properties
 - memory isolation
+- processes can be initialized and allocate or free memory
+- VA space - process can only access memory in ptable
 */
+
+pred invariance {
+    SetupPhysicalMemory
+    Kernel.ptable' = Kernel.ptable
+    Kernel.ptable.mapping' = Kernel.ptable.mapping
+    Kernel.ptable.permissions' = Kernel.ptable.permissions
+    Kernel.st' = Kernel.st
+    Kernel.children' = Kernel.children
+}
 
 pred isolation {
     all p1, p2: Process | all pg: Page {
@@ -276,9 +288,31 @@ pred isolation {
     }
 }
 
-test expect {
-    //traces is sat
-    //{traces implies {always isolation}} is theorem 
+pred safety {
+    all p: UserProcess {
+        eventually initializeProcess[p]
+    }
+    all p: UserProcess | one adr: Int { 
+        eventually allocateMemory[p, adr]
+        eventually freeMemory[p, adr] 
+    }
 }
 
-//run {traces and not {always isolation}}
+pred isolatedVAspaces {
+    all p1, p2: Process | all adr: Int {
+        p1 != p2 => {
+            some Pagetable.mapping[adr] => p1.ptable.mapping[adr] != p1.ptable.mapping[adr]
+        }
+    }
+}
+
+
+test expect {
+    vacuity: {traces} for exactly 8 Page, exactly 3 UserProcess, 4 Int is sat
+    isolation_: {traces implies {always isolation}} is theorem
+    invariance_: {traces implies {always invariance}} is theorem
+    safety_: {traces implies safety} is theorem
+    isolatedVAspaces_: {traces implies isolatedVAspaces} is theorem
+}
+
+//run {traces and not invariance}

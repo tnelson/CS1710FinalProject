@@ -265,7 +265,7 @@ pred traces {
 }
 
 //
-//run{traces} for exactly 8 Page, exactly 3 UserProcess, 4 Int
+run{traces} for exactly 8 Page, exactly 3 UserProcess, 4 Int
 
 // run {some(Pagetable) and some(Page)}
 

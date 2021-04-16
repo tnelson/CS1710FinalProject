@@ -1,14 +1,29 @@
 //Get all the data out of Sterling
 const allinst = instances.map(instanceToGraph)
+const numinst = instances.length - 1
 var maindiv = getElem("stagediv","div")
-console.log(maindiv)
-
-maindiv.innerHTML = ''
 document.body.append(maindiv); 
+
+const clear = () => maindiv.innerHTML = ''
+clear()
+function draw(indx) { 
+console.log("Drawing")
+var nextbtn = getElem("nextbtn","BUTTON")
+nextbtn.innerHTML = "Next"
+nextbtn.onclick = nextClick
+var prevbtn = getElem("prevbtn","BUTTON")
+prevbtn.innerHTML = "Prev"
+prevbtn.onclick = prevClick
+var statebtn = getElem("statebtn","BUTTON")
+statebtn.innerHTML = indx
+maindiv.appendChild(prevbtn)
+maindiv.appendChild(nextbtn)
+maindiv.appendChild(statebtn)
 var e = getElem("proctable","table")
 maindiv.appendChild(e) ; 
-console.log(e)
-createInstTable(allinst[0])
+createInstTable(allinst[indx])
+}
+draw(0) ; 
 function getElem(eid,tp) { 
   var el = document.getElementById(eid) ; 
   if(!el) {
@@ -17,10 +32,27 @@ function getElem(eid,tp) {
   }
   return el ; 
 }
+function nextClick() {
+  const nextst = parseInt(getElem("statebtn","BUTTON").innerHTML) + 1
+  if(nextst <= numinst) { 
+  clear()
+  draw(nextst)
+  }
+}
+function prevClick() { 
+  const prevst =parseInt(getElem("statebtn","BUTTON").innerHTML) - 1
+  if(prevst >= 0 ) {
+  clear()
+  draw(prevst)
+  }
+
+}
 
 function createInstTable(inst) { 
     let table = document.querySelector("table");
-    console.log(table)
+  table.style.border = "1px solid #000"
+  table.style.padding = "10px"
+
     function generateTableHead(table) {
       var tableheaders = ["Process ID","Process","State","PageTable","Pages"]
       let thead = table.createTHead();
@@ -34,12 +66,33 @@ function createInstTable(inst) {
 }
      generateTableHead(table)
     function createProcTable(proc) { 
+      const data =  ["proc_id","pname","proc_state","proc_tbl","perms"]
 
+  
+    let row = table.insertRow();
+      row.style.height = "150px"
+    for (key of data) {
+      let cell = row.insertCell();
+      cell.style.border = "1px solid #000"
+      let text = document.createTextNode(proc[key]);
+      cell.appendChild(text);
+    }
+  
+}
+  inst.process.sort(sortById).map(createProcTable)
     
     }
-
+function sortById(a,b) { 
+a = parseInt(a.proc_id)
+b = parseInt(b.proc_id)
+if(a < b ) return -1
+if (a > b) return 1 
+  return 0
 
 }
+
+
+
 
 function instanceToGraph(inst) { 
   //The States 
@@ -58,13 +111,19 @@ const procs = inst.signature('Process').atoms(true) ;
   const padr = inst.field("address") ; 
   const next = inst.field("next") ; 
   function getProcess(p) { 
-  return {
+    const prpg = p.join(proc_ptb).join(mapping).tuples().map(e => {return e.atoms()[0].id()})
+                .reduce((a,v) => a +"," + v,"")  
+    const perms = p.join(proc_ptb.join(permissions)).tuples().map(e => {return [e.atoms()[0].id(),e.atoms()[1].id()]})
+                  .map(e => "(" + e[0] +","+e[1]+"),").reduce((a,v) => a + "\n " + v , "")
+                                                          
+    
+    return {
     pname : p.id() , 
     proc_id : p.join(pid).tuples()[0].atoms()[0].id() , 
-    proc_tbl : p.join(proc_ptb).tuples().map(e => {return e.atoms()[0].id()}) , 
-    proc_pages: p.join(proc_ptb).join(mapping).tuples().map(e => {return e.atoms()[0].id()}) , 
-    perms: p.join(proc_ptb.join(permissions)).tuples().map(e => {return [e.atoms()[0].id(),e.atoms()[1].id()]}),
-    proc_state: p.join(proc_st).tuples().map(e => {return e.atoms()[0].id()})
+    proc_tbl : p.join(proc_ptb).tuples().map(e => {return e.atoms()[0].id()}).reduce((a,v) => a + " " + v , "") , 
+    proc_pages: prpg , 
+    perms: perms,
+    proc_state: p.join(proc_st).tuples().map(e => {return e.atoms()[0].id()}).reduce((a,v) => a + " " + v , "")
   }
   }
   const allprocs = procs.map(getProcess) ; 

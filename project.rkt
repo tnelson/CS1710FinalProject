@@ -194,6 +194,11 @@ pred deleteProcess[p: Process] {
     no p.(ptable')
     children' = children
     // Other processes stay the same
+
+     all pt : Pagetable | {
+        no ptable.pt => no pt.mapping
+    }
+
     all proc : Process  - p { 
         proc.ptable = proc.ptable'
         proc.ptable.mapping' = proc.ptable.mapping 
@@ -214,7 +219,7 @@ pred initializeProcess[p: Process] {
         ((sum[i] = 1) or (sum[i] = 2)) => 
             {
                 one pg: Page | {
-                    not allocated[pg] // Not working properly for some reason
+                    not allocated[pg] 
                     p.(ptable').(permissions')[pg] = WRITE
                     p.(ptable').(mapping')[i] = pg
                     p.(ptable').(mapping').pg = i
@@ -228,7 +233,10 @@ pred initializeProcess[p: Process] {
         (not (pg in p.ptable.mapping[Int]')) => no p.ptable.permissions[pg]'
     }
 
-    #(p.(ptable').(mapping')) = 2
+    all pt : Pagetable | {
+        no ptable.pt => no pt.mapping
+    }
+
     all proc : Process  - p { 
         proc.ptable = proc.ptable'
         proc.ptable.mapping' = proc.ptable.mapping 
@@ -278,10 +286,66 @@ pred traces {
    //after initP
 }
 
-//
-run{traces} for exactly 8 Page, exactly 3 UserProcess, 4 Int
+run{traces} for exactly 8 Page, exactly 3 UserProcess, 5 Int
 
 // run {some(Pagetable) and some(Page)}
+
+
+/* ######################### */
+/*        INSTANCES          */
+/* ######################### */
+
+
+inst allProcesses {
+
+    // Set Up
+    Process = UserProcess0 + UserProcess1 + UserProcess2 + Kernel0
+    UserProcess = UserProcess0 + UserProcess1 + UserProcess2
+    Kernel = Kernel0
+    Page = Page0 + Page1 + Page2 + Page3 + Page4 + Page5 + Page6 + Page7
+    Pagetable = Pagetable0 + Pagetable1 + Pagetable2 + Pagetable3
+    
+    BROKEN = BROKEN0
+    WRITE = WRITE0
+    BLOCKED = BLOCKED0
+    RUNNABLE = RUNNABLE0
+    FREE = FREE0
+    READ = READ0
+    State = BROKEN0 + BLOCKED0 + RUNNABLE0 + FREE0
+    Permission = WRITE0 + READ0
+    pid = Kernel0->0 + UserProcess0->3 + UserProcess1->2 + UserProcess2->1
+
+    address = Page0->7 + Page1->6 + Page2->5 + Page3->4 + Page4->3 + 
+    Page5->2 + Page6->1 + Page7->0
+    next = Page1->Page0 + Page2->Page1 + Page3->Page2 + Page4->Page3 + 
+    Page5->Page4 + Page6->Page5 + Page7->Page6
+    
+    permissions = Pagetable3->Page0->READ0 + Pagetable3->Page1->READ0 + Pagetable3->Page2->READ0 + 
+    Pagetable3->Page3->READ0 + Pagetable3->Page4->WRITE0 + Pagetable3->Page5->WRITE0 + Pagetable3->Page6->WRITE0
+    
+    // State 1
+    mapping = Pagetable3->1->Page6 + Pagetable3->2->Page5 + 
+    Pagetable3->3->Page4 + Pagetable3->4->Page3 + Pagetable3->5->Page2 + 
+    Pagetable3->6->Page1 + Pagetable3->7->Page0
+    st = Kernel0->RUNNABLE0 + UserProcess0->FREE0 +  UserProcess1->FREE0 + UserProcess2->FREE0
+    ptable = Kernel0->Pagetable3
+
+    // State 2
+    mapping = Pagetable3->1->Page6 + Pagetable3->2->Page5 + 
+    Pagetable3->3->Page4 + Pagetable3->4->Page3 + Pagetable3->5->Page2 + 
+    Pagetable3->6->Page1 + Pagetable3->7->Page0
+    st = Kernel0->RUNNABLE0 + UserProcess0->FREE0 +  UserProcess1->FREE0 + UserProcess2->FREE0
+    ptable = Kernel0->Pagetable3
+
+    //initializeProcess[p1]
+    //after initializeProcess[p2]
+    //after after initializeProcess[p3]
+    //after after after deleteProcess[p1]
+    //after after after after deleteProcess[p2]
+    //after after after after after deleteProcess[p3]
+
+}
+//run{allProcesses} for exactly 8 Page, exactly 3 UserProcess, 4 Int
 
 
 /* ######################### */
@@ -339,7 +403,7 @@ test expect {
     // isolation_: {traces implies {always isolation}} is theorem
     // invariance_: {traces implies {always invariance}} is theorem
     // safety_: {traces implies safety} is theorem
-    isolatedVAspaces_: {traces implies always{isolatedVAspaces}} for exactly 8 Page, exactly 3 UserProcess, 4 Int is theorem
+    //isolatedVAspaces_: {traces implies always{isolatedVAspaces}} for exactly 8 Page, exactly 3 UserProcess, 4 Int is theorem
 }
 
 //run {traces and not invariance}

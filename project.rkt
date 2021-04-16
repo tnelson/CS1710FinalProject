@@ -219,7 +219,7 @@ pred initializeProcess[p: Process] {
     }
     // allocate 2 initial pages
     // You need to refer to the next Page table ptable' not current one!
-
+    
     all i: Int{ // Map first two virtual addresses
         ((sum[i] = 1) or (sum[i] = 2)) => 
             {
@@ -326,7 +326,7 @@ inst allProcesses {
     next = Page1->Page0 + Page2->Page1 + Page3->Page2 + Page4->Page3 + 
     Page5->Page4 + Page6->Page5 + Page7->Page6
     
-    // State 1
+    // State 0
     mapping = Pagetable3->1->Page6 + Pagetable3->2->Page5 + 
     Pagetable3->3->Page4 + Pagetable3->4->Page3 + Pagetable3->5->Page2 + 
     Pagetable3->6->Page1 + Pagetable3->7->Page0
@@ -335,15 +335,29 @@ inst allProcesses {
     permissions = Pagetable3->Page0->READ0 + Pagetable3->Page1->READ0 + Pagetable3->Page2->READ0 + 
     Pagetable3->Page3->READ0 + Pagetable3->Page4->WRITE0 + Pagetable3->Page5->WRITE0 + Pagetable3->Page6->WRITE0
 
-    // State 2 (init UserspaceProcess0)
+    // State 1 (init UserspaceProcess0)
     mapping' = Pagetable3->1->Page6 + Pagetable3->2->Page5 + 
     Pagetable3->3->Page4 + Pagetable3->4->Page3 + Pagetable3->5->Page2 + 
     Pagetable3->6->Page1 + Pagetable3->7->Page0 + Pagetable2->(1->Page3 + 2->Page2)
+
     st' = Kernel0->RUNNABLE0 + UserProcess0->RUNNABLE0 +  UserProcess1->FREE0 + UserProcess2->FREE0
     ptable'= Kernel0->Pagetable3 + UserProcess0->Pagetable2
     permissions' = Pagetable3->Page0->READ0 + Pagetable3->Page1->READ0 + Pagetable3->Page2->READ0 + 
     Pagetable3->Page3->READ0 + Pagetable3->Page4->WRITE0 + Pagetable3->Page5->WRITE0 + Pagetable3->Page6->WRITE0
     + Pagetable2->(Page3->WRITE0 + Page2->WRITE0)
+
+    // State 2 (init UserspaceProcess1)
+    st'' = Kernel0->RUNNABLE0 + UserProcess0->RUNNABLE0 +  UserProcess1->RUNNABLE0 + UserProcess2->FREE0
+    ptable''= Kernel0->Pagetable3 + UserProcess0->Pagetable2 + UserProcess1->Pagetable1
+    mapping'' = Pagetable3->1->Page6 + Pagetable3->2->Page5 + 
+    Pagetable3->3->Page4 + Pagetable3->4->Page3 + Pagetable3->5->Page2 + 
+    Pagetable3->6->Page1 + Pagetable3->7->Page0 + Pagetable2->(1->Page3 + 2->Page2)
+    + Pagetable1->((1->Page1 + 2->Page0))
+    
+    permissions'' = Pagetable3->Page0->READ0 + Pagetable3->Page1->READ0 + Pagetable3->Page2->READ0 + 
+    Pagetable3->Page3->READ0 + Pagetable3->Page4->WRITE0 + Pagetable3->Page5->WRITE0 + Pagetable3->Page6->WRITE0
+    + Pagetable2->(Page3->WRITE0 + Page2->WRITE0) + Pagetable1->(Page1->WRITE0 + Page0->WRITE0)
+
 
     //initializeProcess[p1]
     //after initializeProcess[p2]
@@ -353,6 +367,7 @@ inst allProcesses {
     //after after after after after deleteProcess[p3]
 
 }
+
 run{allProcesses and traces} for exactly 8 Page, exactly 3 UserProcess, 5 Int
 
 

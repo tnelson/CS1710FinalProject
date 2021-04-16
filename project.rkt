@@ -4,6 +4,18 @@
 option problem_type temporal
 option max_tracelength 14 
 
+/* TO DO 
+* Create proper documentation throughout the code - HAVE TO - Anirudh  
+* Create manual instances - HAVE TO  - Jose 
+* Basic test expect -  Jose 
+* Create README describing project - Anirudh 
+* PPT - Anirudh
+* Delete process  - HAVE TO - Jose  
+* Verifying process created and exited safely - Verify process lifecyle - HAVE TO  - Megan 
+* Get rid of children - Megan 
+* Fix exisiting tests  - Megan
+*/
+
 /* ######################### */
 /*          SIGS             */
 /* ######################### */
@@ -252,7 +264,8 @@ pred traces {
    //after initP
 }
 
-run{traces} for exactly 8 Page, exactly 3 UserProcess, 4 Int
+//
+//run{traces} for exactly 8 Page, exactly 3 UserProcess, 4 Int
 
 // run {some(Pagetable) and some(Page)}
 
@@ -301,18 +314,18 @@ pred safety {
 pred isolatedVAspaces {
     all p1, p2: Process | all adr: Int {
         p1 != p2 => {
-            some Pagetable.mapping[adr] => p1.ptable.mapping[adr] != p1.ptable.mapping[adr]
+            some Pagetable.mapping[adr] => p1.ptable.mapping[adr] != p2.ptable.mapping[adr]
         }
     }
 }
 
 
 test expect {
-    vacuity: {traces} for exactly 8 Page, exactly 3 UserProcess, 4 Int is sat
-    isolation_: {traces implies {always isolation}} is theorem
-    invariance_: {traces implies {always invariance}} is theorem
-    safety_: {traces implies safety} is theorem
-    isolatedVAspaces_: {traces implies isolatedVAspaces} is theorem
+    // vacuity: {traces} for exactly 8 Page, exactly 3 UserProcess, 4 Int is sat
+    // isolation_: {traces implies {always isolation}} is theorem
+    // invariance_: {traces implies {always invariance}} is theorem
+    // safety_: {traces implies safety} is theorem
+    isolatedVAspaces_: {traces implies always{isolatedVAspaces}} for exactly 8 Page, exactly 3 UserProcess, 4 Int is theorem
 }
 
 //run {traces and not invariance}

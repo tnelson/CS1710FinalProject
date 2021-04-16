@@ -73,9 +73,9 @@ sig Pagetable {
 abstract sig Process {
     pid : one Int,
     var ptable : lone Pagetable,  // lone vs one
-    var st : one State, 
-    var children : set Process
+    var st : one State
 
+    //var children : set Process
     // registers : set register
     // threads : set Thread
 }
@@ -107,7 +107,6 @@ pred initUserProc {
     UserProcess.st = FREE
     pid.~pid in iden 
     no(UserProcess.ptable)
-    no(children)  // enforce that we start with no children? yes... verify that a process can't have children after it's freed
     all p: UserProcess {
         sum[p.pid] <= #UserProcess
     }
@@ -116,7 +115,6 @@ pred initUserProc {
 pred initKernelProc {
     Kernel.st = RUNNABLE
     Kernel.pid = sing[0]
-    no Kernel.children
     some Kernel.ptable
     // set up the kernel pagetable's mappings (identity mapping, uses 3 pages for kernel code)
     all pg : Page | {
@@ -191,12 +189,12 @@ For running processes
 pred deleteProcess[p: Process] {
     p.st =  RUNNABLE
     st' = st + p->FREE - p->RUNNABLE
-    (p.st)' = FREE
-    no p.(ptable')
     ptable' = ptable - p->p.ptable
-    children' = children
-    // Other processes stay the same
+    mapping' = mapping - p->p.ptable->Int
+    permissions' = permissions - p->p.ptable->Page
 
+    /*
+    // Other processes stay the same
     all pt : Pagetable | {
         no (ptable').pt => no pt.(mapping')
         no (ptable').pt => no pt.(permissions')
@@ -207,19 +205,19 @@ pred deleteProcess[p: Process] {
         proc.ptable.mapping' = proc.ptable.mapping 
         proc.ptable.permissions' = proc.ptable.permissions
     }
+    */
 }
 
 pred initializeProcess[p: Process] {
     p.st = FREE
     st' = st + p->RUNNABLE - p->FREE
     (p.st)' = RUNNABLE  //Rewriting this line from st' = st + .. to (p.st)' solved the UNSAT problem
-    children' = children
     one pt: Pagetable{
         ptable' = ptable + p->pt
     }
     // allocate 2 initial pages
     // You need to refer to the next Page table ptable' not current one!
-    
+
     all i: Int{ // Map first two virtual addresses
         ((sum[i] = 1) or (sum[i] = 2)) => 
             {
@@ -257,7 +255,6 @@ pred allocateMemory[p: Process, adr: Int] {
         permissions' = permissions + p.ptable->pg->WRITE // represents allocating heap memory -- writeable
     }
     st' = st
-    children' = children
     ptable' = ptable
 }
 
@@ -267,7 +264,6 @@ pred freeMemory[p: Process, adr: Int] {
     mapping' = mapping - p.ptable->adr->p.ptable.mapping[adr]
     permissions' = permissions - p.ptable->p.ptable.mapping[adr]->p.ptable.permissions[p.ptable.mapping[adr]]
     st' = st
-    children' = children
     ptable' = ptable
 }
 
@@ -326,7 +322,7 @@ inst allProcesses {
     next = Page1->Page0 + Page2->Page1 + Page3->Page2 + Page4->Page3 + 
     Page5->Page4 + Page6->Page5 + Page7->Page6
     
-    // State 0
+    // State 1
     mapping = Pagetable3->1->Page6 + Pagetable3->2->Page5 + 
     Pagetable3->3->Page4 + Pagetable3->4->Page3 + Pagetable3->5->Page2 + 
     Pagetable3->6->Page1 + Pagetable3->7->Page0
@@ -335,29 +331,15 @@ inst allProcesses {
     permissions = Pagetable3->Page0->READ0 + Pagetable3->Page1->READ0 + Pagetable3->Page2->READ0 + 
     Pagetable3->Page3->READ0 + Pagetable3->Page4->WRITE0 + Pagetable3->Page5->WRITE0 + Pagetable3->Page6->WRITE0
 
-    // State 1 (init UserspaceProcess0)
+    // State 2 (init UserspaceProcess0)
     mapping' = Pagetable3->1->Page6 + Pagetable3->2->Page5 + 
     Pagetable3->3->Page4 + Pagetable3->4->Page3 + Pagetable3->5->Page2 + 
     Pagetable3->6->Page1 + Pagetable3->7->Page0 + Pagetable2->(1->Page3 + 2->Page2)
-
     st' = Kernel0->RUNNABLE0 + UserProcess0->RUNNABLE0 +  UserProcess1->FREE0 + UserProcess2->FREE0
     ptable'= Kernel0->Pagetable3 + UserProcess0->Pagetable2
     permissions' = Pagetable3->Page0->READ0 + Pagetable3->Page1->READ0 + Pagetable3->Page2->READ0 + 
     Pagetable3->Page3->READ0 + Pagetable3->Page4->WRITE0 + Pagetable3->Page5->WRITE0 + Pagetable3->Page6->WRITE0
     + Pagetable2->(Page3->WRITE0 + Page2->WRITE0)
-
-    // State 2 (init UserspaceProcess1)
-    st'' = Kernel0->RUNNABLE0 + UserProcess0->RUNNABLE0 +  UserProcess1->RUNNABLE0 + UserProcess2->FREE0
-    ptable''= Kernel0->Pagetable3 + UserProcess0->Pagetable2 + UserProcess1->Pagetable1
-    mapping'' = Pagetable3->1->Page6 + Pagetable3->2->Page5 + 
-    Pagetable3->3->Page4 + Pagetable3->4->Page3 + Pagetable3->5->Page2 + 
-    Pagetable3->6->Page1 + Pagetable3->7->Page0 + Pagetable2->(1->Page3 + 2->Page2)
-    + Pagetable1->((1->Page1 + 2->Page0))
-    
-    permissions'' = Pagetable3->Page0->READ0 + Pagetable3->Page1->READ0 + Pagetable3->Page2->READ0 + 
-    Pagetable3->Page3->READ0 + Pagetable3->Page4->WRITE0 + Pagetable3->Page5->WRITE0 + Pagetable3->Page6->WRITE0
-    + Pagetable2->(Page3->WRITE0 + Page2->WRITE0) + Pagetable1->(Page1->WRITE0 + Page0->WRITE0)
-
 
     //initializeProcess[p1]
     //after initializeProcess[p2]
@@ -367,8 +349,7 @@ inst allProcesses {
     //after after after after after deleteProcess[p3]
 
 }
-
-run{allProcesses and traces} for exactly 8 Page, exactly 3 UserProcess, 5 Int
+//run{allProcesses and traces} for exactly 8 Page, exactly 3 UserProcess, 5 Int
 
 
 /* ######################### */
@@ -391,7 +372,6 @@ pred invariance {
     Kernel.ptable.mapping' = Kernel.ptable.mapping
     Kernel.ptable.permissions' = Kernel.ptable.permissions
     Kernel.st' = Kernel.st
-    Kernel.children' = Kernel.children
 }
 
 pred isolation {
@@ -404,29 +384,81 @@ pred isolation {
 
 pred safety {
     all p: UserProcess {
-        eventually initializeProcess[p]
+        initializeProcess[p] => {
+            p.st = FREE
+            p.st' = RUNNABLE
+            no p.ptable
+            some p.ptable'
+        }
+        deleteProcess[p] => {
+            p.st = RUNNABLE
+            p.st' = FREE
+            some p.ptable
+            no p.ptable'
+        }
     }
-    all p: UserProcess | one adr: Int { 
-        eventually allocateMemory[p, adr]
-        eventually freeMemory[p, adr] 
+    all p: UserProcess | some adr: Int { 
+        allocateMemory[p, adr] => {
+            some p.ptable
+            some p.ptable'
+            no p.ptable.mapping[adr]
+            some p.ptable.mapping[adr]'
+            no p.ptable.permissions[p.ptable.mapping[adr]]
+            p.ptable.permissions[p.ptable.mapping[adr]]' = WRITE
+        }
+        freeMemory[p, adr] => {
+            some p.ptable
+            some p.ptable'
+            some p.ptable.mapping[adr]
+            no p.ptable.mapping[adr]'
+            p.ptable.permissions[p.ptable.mapping[adr]] = WRITE
+            no p.ptable.permissions[p.ptable.mapping[adr]]'
+        }
     }
 }
 
 pred isolatedVAspaces {
     all p1, p2: Process | all adr: Int {
         p1 != p2 => {
-            some Pagetable.mapping[adr] => p1.ptable.mapping[adr] != p2.ptable.mapping[adr]
+            // If process 1 has a VA that maps to a page accessible by process 2
+            some p1.ptable.mapping[adr] and p1.ptable.mapping[adr] in p2.ptable.mapping[Int] => {
+                // Then, process 1 and process 2 cannot have the same permissions on that page
+                p1.ptable.permissions[p1.ptable.mapping[adr]] != p2.ptable.permissions[p1.ptable.mapping[adr]]
+            }
         }
     }
 }
 
-
-test expect {
-    // vacuity: {traces} for exactly 8 Page, exactly 3 UserProcess, 4 Int is sat
-    // isolation_: {traces implies {always isolation}} is theorem
-    // invariance_: {traces implies {always invariance}} is theorem
-    // safety_: {traces implies safety} is theorem
-    //isolatedVAspaces_: {traces implies always{isolatedVAspaces}} for exactly 8 Page, exactly 3 UserProcess, 4 Int is theorem
+pred VASpacesCanOverlap {
+    some p1, p2: Process | some adr: Int {
+        p1 != p2 => {
+            // Processes map same VA to different pages
+            p1.ptable.mapping[adr] != p2.ptable.mapping[adr]
+        }
+    }
 }
 
-//run {traces and not invariance}
+pred procInitializedAndDeleted {
+    
+}
+
+pred pageAllocatedAndFreed {
+    
+}
+
+// concrete `sat` testing
+test expect {
+    {traces and VASpacesCanOverlap} for exactly 8 Page, exactly 3 UserProcess, 4 Int is sat
+    {traces and procInitializedAndDeleted} for exactly 8 Page, exactly 3 UserProcess, 4 Int is sat
+}
+
+// verification `theorem` testing
+test expect {
+    //vacuity: {traces} for exactly 8 Page, exactly 3 UserProcess, 4 Int is sat
+    isolation_: {traces implies always isolation} for exactly 8 Page, exactly 3 UserProcess, 4 Int is theorem
+    //invariance_: {traces implies always invariance} for exactly 8 Page, exactly 3 UserProcess, 4 Int is theorem
+    //safety_: {traces implies always safety} for exactly 8 Page, exactly 3 UserProcess, 4 Int is theorem
+    //isolatedVAspaces_: {traces implies always isolatedVAspaces} for exactly 8 Page, exactly 3 UserProcess, 4 Int is theorem
+}
+
+//run {traces and not always safety} for exactly 8 Page, exactly 3 UserProcess, 4 Int

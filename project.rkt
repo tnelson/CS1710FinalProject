@@ -187,6 +187,20 @@ For running processes
 - freeMemory[p: Process, adr: Int]
 */
 
+pred deleteProcess[p: Process] {
+    p.st =  RUNNABLE
+    st' = st + p->FREE - p->RUNNABLE
+    (p.st)' = FREE
+    no p.(ptable')
+    children' = children
+    // Other processes stay the same
+    all proc : Process  - p { 
+        proc.ptable = proc.ptable'
+        proc.ptable.mapping' = proc.ptable.mapping 
+        proc.ptable.permissions' = proc.ptable.permissions
+    }
+}
+
 pred initializeProcess[p: Process] {
     p.st = FREE
     st' = st + p->RUNNABLE - p->FREE
@@ -245,7 +259,7 @@ pred freeMemory[p: Process, adr: Int] {
 
 pred moves { 
     always {
-        (some p: Process - Kernel | initializeProcess[p]) or (some p: Process - Kernel | one adr: Int { allocateMemory[p, adr] or freeMemory[p, adr] } )
+        (some p: Process - Kernel | initializeProcess[p] or deleteProcess[p]) or (some p: Process - Kernel | one adr: Int { allocateMemory[p, adr] or freeMemory[p, adr] } )
         /*some p1: Process - Kernel | one adr: Int { // Process vs. UserProcess
             // try running with just the initializeProcess option, shouldn't be unsat
             initializeProcess[p1] or allocateMemory[p1, adr] or freeMemory[p1, adr]

@@ -439,26 +439,50 @@ pred VASpacesCanOverlap {
 }
 
 pred procInitializedAndDeleted {
-    
+    some p: UserProcess {
+        eventually initializeProcess[p]
+        eventually deleteProcess[p]
+    }
 }
 
 pred pageAllocatedAndFreed {
-    
+    some p: UserProcess | some adr: Int {
+        eventually allocateMemory[p, adr]
+        eventually freeMemory[p, adr]
+    }
 }
 
-// concrete `sat` testing
-test expect {
-    {traces and VASpacesCanOverlap} for exactly 8 Page, exactly 3 UserProcess, 4 Int is sat
-    {traces and procInitializedAndDeleted} for exactly 8 Page, exactly 3 UserProcess, 4 Int is sat
+pred allocateToUnititializedProc {
+    some p: UserProcess | some adr: Int {
+        always not initializeProcess[p]
+        eventually allocateMemory[p, adr]
+    }
 }
+
+pred freeFromUnititializedProc {
+    some p: UserProcess | some adr: Int {
+        always not initializeProcess[p]
+        eventually freeMemory[p, adr]
+    }
+}
+
+/*
+// concrete `sat`/`unsat` testing
+test expect {
+    vacuity: {traces} for exactly 7 Page, exactly 1 UserProcess, 4 Int is sat
+    {traces and VASpacesCanOverlap} for exactly 7 Page, exactly 1 UserProcess, 4 Int is sat
+    {traces and procInitializedAndDeleted} for exactly 7 Page, exactly 1 UserProcess, 4 Int is sat
+    {traces and allocateToUnititializedProc} for exactly 7 Page, exactly 1 UserProcess, 4 Int is unsat
+    {traces and freeFromUnititializedProc} for exactly 7 Page, exactly 1 UserProcess, 4 Int is unsat
+}
+*/
 
 // verification `theorem` testing
 test expect {
-    //vacuity: {traces} for exactly 8 Page, exactly 3 UserProcess, 4 Int is sat
-    isolation_: {traces implies always isolation} for exactly 8 Page, exactly 3 UserProcess, 4 Int is theorem
-    //invariance_: {traces implies always invariance} for exactly 8 Page, exactly 3 UserProcess, 4 Int is theorem
-    //safety_: {traces implies always safety} for exactly 8 Page, exactly 3 UserProcess, 4 Int is theorem
-    //isolatedVAspaces_: {traces implies always isolatedVAspaces} for exactly 8 Page, exactly 3 UserProcess, 4 Int is theorem
+    isolation_: {traces and not always isolation} for exactly 7 Page, exactly 1 UserProcess, 4 Int is unsat
+    invariance_: {traces implies always invariance} for exactly 7 Page, exactly 1 UserProcess, 4 Int is theorem
+    safety_: {traces implies always safety} for exactly 7 Page, exactly 1 UserProcess, 4 Int is theorem
+    isolatedVAspaces_: {traces implies always isolatedVAspaces} for exactly 7 Page, exactly 1 UserProcess, 4 Int is theorem
 }
 
-//run {traces and not always safety} for exactly 8 Page, exactly 3 UserProcess, 4 Int
+//run {not traces} for exactly 5 Page, exactly 1 UserProcess, 4 Int

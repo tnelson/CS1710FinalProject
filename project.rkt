@@ -4,32 +4,18 @@
 option problem_type temporal
 option max_tracelength 14 
 
-/* TO DO 
-* Create proper documentation throughout the code - HAVE TO - Anirudh  
-* Create manual instances - HAVE TO  - Jose 
-* Basic test expect -  Jose 
-* Create README describing project - Anirudh 
-* PPT - Anirudh
-* Delete process  - HAVE TO - Jose  
-* Verifying process created and exited safely - Verify process lifecyle - HAVE TO  - Megan 
-* Get rid of children - Megan 
-* Fix exisiting tests  - Megan
-*/
-
 /* ######################### */
 /*          SIGS             */
 /* ######################### */
-//Notes : 
-//safety and liveness for the scheduler -> all procs get turn 
-//custom visualiser not mandatory but would be good -> upto your view on how sterling is looking 
-//To DO : 
-// Make sure init is working 
-
 // The state of a given process
 abstract sig State {}
+// A process is running 
 one sig RUNNABLE extends State {}
+// A process slot is free and empty 
 one sig FREE extends State {}
+//The process is blocked
 one sig BLOCKED extends State {}
+//The process has crashed 
 one sig BROKEN extends State {}
 
 // Page permissions
@@ -38,47 +24,44 @@ one sig READ extends Permission {} // read/view only
 one sig WRITE extends Permission {} // read and write 
 
 /*
-Add scheduler sig later
-- schedules when processes are allowed to run
-- when the process is running it may execute a move
-*/
-
-// CHOICES: If/how to represent data in a page -- boolean flag, actual data, nothing?
-// address field and next field? 
+*A page is the smallest unit of memory we consider in order to actually model an interesting system in Forge
+* This is also very realistic as a Page is usually the smallest unit of memory allocated to processes.
+* Memory is tracked by the kernel in units of pages 
+* Here our sig has two fields - 
+* address : Each page has an integer address 
+* next : Each page has a page that comes strictly after it. This is intended to model the sequential nature of memory. 
+*/ 
 sig Page {
     address : one Int,
     next : lone Page
-    //var allocated : lone Bool // should we have this indicator?
 }
-
-// CHOICES: Should extend Page or not?
-// If we extend page, not accurately representing virtual addresses
-// If we don't extend page, we can't have a Page->Page mapping that
-// encompasses virtual or physical pages
-// Answer: have Address sig in addition to Page sig
-// sig VMPage {  
-//     //virtualAdrr : one Int
-// }
-
-// CHOICES:
-// Should there be a `mapping` field at all? In a real system, a pagetable is not
-// differntiable from a page; What makes most sense from a modelling perspective?
-// First in relation: Int vs. Address sig for virtual memory?
-// Second in relation: Page vs. Int sig for physical memory? 
+/*
+*A pagetable is the data structure that stores the mapping from a processes's virtual memory to the actualy physical memory address
+* Each running process has an associated pagetable
+* mapping : The mapping from integer Virtual Addresses to physical pages
+* permissions : For each page can the process only read or can it read and write to the page ? 
+*/
 sig Pagetable {
-    var mapping : set Int -> Page, // Int -> Page or Int -> Int ?
+    var mapping : set Int -> Page, 
     var permissions: set Page -> Permission
 }
 
+/*
+A Process that runs on the system 
+pid : The unique Process id 
+ptable : The pagetable for the process
+st : The current state of the process
+ */
 abstract sig Process {
     pid : one Int,
-    var ptable : lone Pagetable,  // lone vs one
+    var ptable : lone Pagetable, 
     var st : one State
-
-    //var children : set Process
-    // registers : set register
-    // threads : set Thread
 }
+/* 
+The Kernel is the OS Kernel that runs with privelages mode. It can access all pages
+UserProcess are the rest of processes that run on the system. They have restrictions and are restricted to only 
+the pages provided to it by the Kernel. 
+*/
 one sig Kernel extends Process {}
 sig UserProcess extends Process {} 
 
@@ -101,8 +84,10 @@ pred SetupPhysicalMemory{
     }
 }
 
-// All User Processes are empty initially.
-// Reminiscent of an array of processes that are waiting to be created.
+/* 
+UserProcess are an array of processes waiting to be intialized and run 
+In the initial state all of them are free and don't have an associated pagetable 
+*/
 pred initUserProc { 
     UserProcess.st = FREE
     pid.~pid in iden 
@@ -111,7 +96,10 @@ pred initUserProc {
         sum[p.pid] <= #UserProcess
     }
 }
-
+/*
+The Kernel is running in the beginning 
+It also has the process id 0 , and has a pagetable with mappings to all the pages in memory
+*/
 pred initKernelProc {
     Kernel.st = RUNNABLE
     Kernel.pid = sing[0]
@@ -127,7 +115,9 @@ pred initKernelProc {
         sum[pg.address] > 3 => Kernel.ptable.permissions[pg] = READ
     }
 } 
-
+/*
+*All the Page tables expect the Kernel's are empty in the beginning
+*/
 pred emptyPageTables {
     all pt: Pagetable - Kernel.ptable | {
         no pt.mapping
@@ -135,18 +125,20 @@ pred emptyPageTables {
     }
 }
 
-// Initial state requirements for the processes
+// This predicate puts together all the predicates which specify the intialState
 pred initialState {
     initKernelProc
     initUserProc
     emptyPageTables
 }
-
+/*
+invariants encapsulates all the things we want to hold true throughout all states
+These include : 
+*The physical memory page setup
+* The kernel pagetable being the same (Should we be verifying this instead ? No , because if we didn't specify it here we would have to do so in 
+all the state change predicates)
+*/
 pred invariants { 
-    // number of pages?
-    // number of virtual pages?
-    // max amount of data in a page (if modelling that)
-    // max number of mappings in a pagetable (if modelling that)
     SetupPhysicalMemory
     ptable.~ptable in iden 
     all i: Int {
@@ -163,8 +155,9 @@ pred invariants {
 /*          HELPERS          */
 /* ######################### */
 
-// Checks if a physical page is in use
-// in use = some process has write permissions
+/* Checks if a physical page is in use
+  in use = some process has write permissions
+*/
 pred allocated[pg: Page]{
     pg.address = sing[0] or (WRITE in Process.ptable.permissions[pg]) // pg can also be readable from other processes
 }
@@ -178,12 +171,18 @@ pred virtualAllocated[p: Process, addr: Int]{
 /*           MOVES           */
 /* ######################### */
 
+/* 
+We model 4 primary state changes : 
+1. A Process is intialized : A process goes from free to now running and now has a pagetable with maps to its allocated memory
+2. Memory is allocated : An intialized process get's some more memory allocated to it
+3. Memory is freed  : Some memory allocated to a process is freed
+4. A Process is deleted : A process is done and is then deleted (it's memory is freed and page table is deleted) 
+Through these 4 moves we capture the core of the process lifecyle and the associated memory management
+
+*/
+
 /*
-- initialize process
-For running processes
-- doNothing[p: Process]
-- allocateMemory[p: Process]
-- freeMemory[p: Process, adr: Int]
+deleteProcess frees a running process freeing the associated memory and deleting its pagetable 
 */
 
 pred deleteProcess[p: Process] {
@@ -207,11 +206,11 @@ pred deleteProcess[p: Process] {
     }
     */
 }
-
+/*Sets up a process giving it a pagetable and a starting memory allocation of 2 Pages */
 pred initializeProcess[p: Process] {
     p.st = FREE
     st' = st + p->RUNNABLE - p->FREE
-    (p.st)' = RUNNABLE  //Rewriting this line from st' = st + .. to (p.st)' solved the UNSAT problem
+    (p.st)' = RUNNABLE  
     one pt: Pagetable{
         ptable' = ptable + p->pt
     }
@@ -240,14 +239,15 @@ pred initializeProcess[p: Process] {
         no (ptable').pt => no pt.(mapping')
         no (ptable').pt => no pt.(permissions')
     }
-
+    //other processes do not change
     all proc : Process  - p { 
         proc.ptable = proc.ptable'
         proc.ptable.mapping' = proc.ptable.mapping 
         proc.ptable.permissions' = proc.ptable.permissions
     }
 }
-
+// A process requests some additional memory at adr which is then allocated assuming it's available
+// Mapping to that address is then added to it's pagetable
 pred allocateMemory[p: Process, adr: Int] {
     some pg: Page {
         not allocated[pg]
@@ -257,6 +257,9 @@ pred allocateMemory[p: Process, adr: Int] {
     st' = st
     ptable' = ptable
 }
+/*
+Frees memory allocated to the process. Removes it from the processes pagetable 
+*/
 
 pred freeMemory[p: Process, adr: Int] {
     // once allocateMemory[p, adr] **This should be a property we verify about the system not enforce**
@@ -266,6 +269,13 @@ pred freeMemory[p: Process, adr: Int] {
     st' = st
     ptable' = ptable
 }
+/*
+Enforces all the moves a system can make at any given time which are:
+intializeProcess
+deleteProcess
+allocateMemory (To a certain process)
+freeMemory (from a  certain process)
+*/
 
 pred moves { 
     always {
@@ -276,16 +286,14 @@ pred moves {
         }*/
     }
 }
-
-pred initP{
-    some p: Process | {initializeProcess[p]}
-}
+/*The traces predicate brings together the system
+*It enforces the intial state, the system invariants as well as the possible moves
+*/
 pred traces { 
    initialState
    always(invariants)
    moves            
-   //initP
-   //after initP
+   
 }
 
 //run{traces} for exactly 8 Page, exactly 3 UserProcess, 5 Int
@@ -297,7 +305,7 @@ pred traces {
 /*        INSTANCES          */
 /* ######################### */
 
-
+// A sample instance that our system generates
 inst allProcesses {
 
     // Set Up
@@ -356,6 +364,7 @@ inst allProcesses {
 /*       VERIFICATION        */
 /* ######################### */
 
+/* This section models all the properties we verify about our system */
 /*
 Model working properly
 - processes never lose their pagetables
@@ -373,7 +382,7 @@ pred invariance {
     Kernel.ptable.permissions' = Kernel.ptable.permissions
     Kernel.st' = Kernel.st
 }
-
+// No two processes should every have access to the same page
 pred isolation {
     all p1, p2: Process | all pg: Page {
         p1 != p2 => {
@@ -381,7 +390,7 @@ pred isolation {
         }
     }
 }
-
+//?
 pred safety {
     all p: UserProcess {
         initializeProcess[p] => {
@@ -472,7 +481,6 @@ pred freedOnceAllocated {
     }
 }
 
-
 // concrete `sat`/`unsat` testing
 test expect {
     vacuity: {traces} for exactly 7 Page, exactly 1 UserProcess, 4 Int is sat
@@ -494,4 +502,3 @@ test expect {
 }
 */
 
-//run {not traces} for exactly 5 Page, exactly 1 UserProcess, 4 Int

@@ -466,7 +466,13 @@ pred freeFromUnititializedProc {
     }
 }
 
-/*
+pred freedOnceAllocated {
+    some p: UserProcess | some adr: Int {
+        freeMemory[p, adr] implies once allocateMemory[p, adr]
+    }
+}
+
+
 // concrete `sat`/`unsat` testing
 test expect {
     vacuity: {traces} for exactly 7 Page, exactly 1 UserProcess, 4 Int is sat
@@ -474,9 +480,11 @@ test expect {
     {traces and procInitializedAndDeleted} for exactly 7 Page, exactly 1 UserProcess, 4 Int is sat
     {traces and allocateToUnititializedProc} for exactly 7 Page, exactly 1 UserProcess, 4 Int is unsat
     {traces and freeFromUnititializedProc} for exactly 7 Page, exactly 1 UserProcess, 4 Int is unsat
+    {traces and freedOnceAllocated} for exactly 7 Page, exactly 1 UserProcess, 4 Int is sat
 }
-*/
 
+
+/*
 // verification `theorem` testing
 test expect {
     isolation_: {traces and not always isolation} for exactly 7 Page, exactly 1 UserProcess, 4 Int is unsat
@@ -484,5 +492,6 @@ test expect {
     safety_: {traces implies always safety} for exactly 7 Page, exactly 1 UserProcess, 4 Int is theorem
     isolatedVAspaces_: {traces implies always isolatedVAspaces} for exactly 7 Page, exactly 1 UserProcess, 4 Int is theorem
 }
+*/
 
 //run {not traces} for exactly 5 Page, exactly 1 UserProcess, 4 Int

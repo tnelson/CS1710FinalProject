@@ -390,8 +390,9 @@ pred VASpacesCanOverlap {
 // a process that is initialized is eventually deleted
 pred procInitializedAndDeleted {
     some p: UserProcess {
-        eventually initializeProcess[p]
-        eventually deleteProcess[p]
+        always {allocateMemory[p, adr] => eventually freeMemory[p, adr]}
+        // eventually initializeProcess[p]
+        // eventually deleteProcess[p]
     }
 }
 
@@ -445,27 +446,38 @@ pred freeFromWrongProc {
 Running the tests on larger bounds is possible but then each test may take upwards of a few hours
 */
 
-//concrete `sat`/`unsat` testing
+concrete `sat`/`unsat` testing
+test expect {
+    vacuity: {traces} for exactly 7 Page, exactly 1 UserProcess, 4 Int is sat
+    {traces and VASpacesCanOverlap} for exactly 7 Page, exactly 1 UserProcess, 4 Int is sat
+    {traces and procInitializedAndDeleted} for exactly 7 Page, exactly 1 UserProcess, 4 Int is sat
+    {traces and deletedOnceInitialized} for exactly 7 Page, exactly 1 UserProcess, 4 Int is sat
+    {traces and freedOnceAllocated} for exactly 7 Page, exactly 1 UserProcess, 4 Int is sat
+    {traces and allocateToUnititializedProc} for exactly 7 Page, exactly 1 UserProcess, 4 Int is unsat
+    {traces and freeFromUnititializedProc} for exactly 7 Page, exactly 1 UserProcess, 4 Int is unsat
+    {traces and pageAllocatedAndFreed} for exactly 7 Page, exactly 1 UserProcess, 4 Int is sat
+    {traces and freeFromWrongProc} for exactly 7 Page, exactly 1 UserProcess, 4 Int is unsat
+} 
+
+
+
+// verification `theorem` testing
+test expect {
+    isolation_: {traces and not always isolation} for exactly 7 Page, exactly 1 UserProcess, 4 Int is unsat
+    invariance_: {traces implies always invariance} for exactly 7 Page, exactly 1 UserProcess, 4 Int is theorem
+    safety_: {traces implies always safety} for exactly 7 Page, exactly 1 UserProcess, 4 Int is theorem
+    isolatedVAspaces_: {traces implies always isolatedVAspaces} for exactly 7 Page, exactly 1 UserProcess, 4 Int is theorem
+}
+
 // test expect {
-//     vacuity: {traces} for exactly 7 Page, exactly 1 UserProcess, 4 Int is sat
-//     {traces and VASpacesCanOverlap} for exactly 7 Page, exactly 1 UserProcess, 4 Int is sat
-//     {traces and procInitializedAndDeleted} for exactly 7 Page, exactly 1 UserProcess, 4 Int is sat
-//     {traces and deletedOnceInitialized} for exactly 7 Page, exactly 1 UserProcess, 4 Int is sat
-//     {traces and freedOnceAllocated} for exactly 7 Page, exactly 1 UserProcess, 4 Int is sat
-//     {traces and allocateToUnititializedProc} for exactly 7 Page, exactly 1 UserProcess, 4 Int is unsat
-//     {traces and freeFromUnititializedProc} for exactly 7 Page, exactly 1 UserProcess, 4 Int is unsat
-//     {traces and pageAllocatedAndFreed} for exactly 7 Page, exactly 1 UserProcess, 4 Int is sat
-//     {traces and freeFromWrongProc} for exactly 7 Page, exactly 1 UserProcess, 4 Int is unsat
-// } 
+//     multiple_procs_coexist : {
+//         some p1,p2,p3 : UserProcess | i1,i2,i3 : Int { 
+//             initializeProcess[p1]
+//             after initializeProcess[p2]
+//             after 
+//         }
+//     }
 
-
-
-// // verification `theorem` testing
-// test expect {
-//     isolation_: {traces and not always isolation} for exactly 7 Page, exactly 1 UserProcess, 4 Int is unsat
-//     invariance_: {traces implies always invariance} for exactly 7 Page, exactly 1 UserProcess, 4 Int is theorem
-//     safety_: {traces implies always safety} for exactly 7 Page, exactly 1 UserProcess, 4 Int is theorem
-//     isolatedVAspaces_: {traces implies always isolatedVAspaces} for exactly 7 Page, exactly 1 UserProcess, 4 Int is theorem
 // }
 
 

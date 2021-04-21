@@ -1,13 +1,13 @@
 //Get all the data out of Sterling
+var stage =  document.getElementsByClassName("script-stage")[1];
 const allinst = instances.map(instanceToGraph)
 const numinst = instances.length - 1
 var maindiv = getElem("stagediv","div")
-document.body.append(maindiv); 
+stage.appendChild(maindiv); 
 
 const clear = () => maindiv.innerHTML = ''
 clear()
 function draw(indx) { 
-console.log("Drawing")
 var nextbtn = getElem("nextbtn","BUTTON")
 nextbtn.innerHTML = "Next"
 nextbtn.onclick = nextClick

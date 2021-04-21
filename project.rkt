@@ -290,7 +290,6 @@ pred traces {
 //A way to run the model
 //run{traces} for exactly 8 Page, exactly 3 UserProcess, 5 Int
 
-
 /* ######################### */
 /*       VERIFICATION        */
 /* ######################### */
@@ -389,7 +388,7 @@ pred VASpacesCanOverlap {
 
 // a process that is initialized is eventually deleted
 pred procInitializedAndDeleted {
-    some p: UserProcess {
+    some p: UserProcess | some adr: Int {
         always {allocateMemory[p, adr] => eventually freeMemory[p, adr]}
         // eventually initializeProcess[p]
         // eventually deleteProcess[p]
@@ -446,199 +445,90 @@ pred freeFromWrongProc {
 Running the tests on larger bounds is possible but then each test may take upwards of a few hours
 */
 
-concrete `sat`/`unsat` testing
+// concrete `sat`/`unsat` testing
 test expect {
-    vacuity: {traces} for exactly 7 Page, exactly 1 UserProcess, 4 Int is sat
-    {traces and VASpacesCanOverlap} for exactly 7 Page, exactly 1 UserProcess, 4 Int is sat
-    {traces and procInitializedAndDeleted} for exactly 7 Page, exactly 1 UserProcess, 4 Int is sat
-    {traces and deletedOnceInitialized} for exactly 7 Page, exactly 1 UserProcess, 4 Int is sat
-    {traces and freedOnceAllocated} for exactly 7 Page, exactly 1 UserProcess, 4 Int is sat
-    {traces and allocateToUnititializedProc} for exactly 7 Page, exactly 1 UserProcess, 4 Int is unsat
-    {traces and freeFromUnititializedProc} for exactly 7 Page, exactly 1 UserProcess, 4 Int is unsat
-    {traces and pageAllocatedAndFreed} for exactly 7 Page, exactly 1 UserProcess, 4 Int is sat
-    {traces and freeFromWrongProc} for exactly 7 Page, exactly 1 UserProcess, 4 Int is unsat
+    vacuity: {traces}  for exactly 8 Page, exactly 2 UserProcess, 4 Int  is sat
+    {traces and VASpacesCanOverlap}  for exactly 8 Page, exactly 2 UserProcess, 4 Int is sat
+    {traces and procInitializedAndDeleted}  for exactly 8 Page, exactly 2 UserProcess, 4 Int is sat
+    {traces and deletedOnceInitialized}  for exactly 8 Page, exactly 2 UserProcess, 4 Int  is sat
+    {traces and freedOnceAllocated}  for exactly 8 Page, exactly 2 UserProcess, 4 Int  is sat
+    {traces and allocateToUnititializedProc}  for exactly 8 Page, exactly 2 UserProcess, 4 Int  is unsat
+    {traces and freeFromUnititializedProc}  for exactly 8 Page, exactly 2 UserProcess, 4 Int  is unsat
+    {traces and pageAllocatedAndFreed}  for exactly 8 Page, exactly 2 UserProcess, 4 Int  is sat
+    {traces and freeFromWrongProc}  for exactly 8 Page, exactly 2 UserProcess, 4 Int  is unsat
 } 
 
 
 
-// verification `theorem` testing
+// // verification `theorem` testing
 test expect {
-    isolation_: {traces and not always isolation} for exactly 7 Page, exactly 1 UserProcess, 4 Int is unsat
-    invariance_: {traces implies always invariance} for exactly 7 Page, exactly 1 UserProcess, 4 Int is theorem
-    safety_: {traces implies always safety} for exactly 7 Page, exactly 1 UserProcess, 4 Int is theorem
-    isolatedVAspaces_: {traces implies always isolatedVAspaces} for exactly 7 Page, exactly 1 UserProcess, 4 Int is theorem
+    isolation_: {traces => always{isolation}} for exactly 8 Page, exactly 2 UserProcess, 4 Int is theorem
+    invariance_: {traces implies always invariance} for exactly 8 Page, exactly 2 UserProcess, 4 Int  is theorem
+    safety_: {traces implies always safety} for exactly 8 Page, exactly 2 UserProcess, 4 Int  is theorem
+    isolatedVAspaces_: {traces implies always isolatedVAspaces}  for exactly 8 Page, exactly 2 UserProcess, 4 Int  is theorem
 }
 
-// test expect {
-//     multiple_procs_coexist : {
-//         some p1,p2,p3 : UserProcess | i1,i2,i3 : Int { 
-//             initializeProcess[p1]
-//             after initializeProcess[p2]
-//             after 
-//         }
-//     }
+// //Sanity Checks 
 
+// test expect {
+//     trcs_bounds : {traces} for exactly 7 Page, exactly 1 UserProcess, 4 Int  is sat
+//     trcs_bounds1 : {traces} for exactly 8 Page, exactly 3 UserProcess, 4 Int  is sat
+//     invs: {invariants} is sat
+//     mvs : {moves} is sat
+//     initS : {initialState} is sat
 // }
 
 
-/* ######################### */
-/*        INSTANCES          */
-/* ######################### */
-test expect {
- initDelProc : {
-    // Set Up
-    Process = UserProcess0 + UserProcess1 + UserProcess2 + Kernel0
-    UserProcess = UserProcess0 + UserProcess1 + UserProcess2
-    Kernel = Kernel0
-    Page = Page0 + Page1 + Page2 + Page3 + Page4 + Page5 + Page6 + Page7
-    Pagetable = Pagetable0 + Pagetable1 + Pagetable2 + Pagetable3
-    
-    BROKEN = BROKEN0
-    WRITE = WRITE0
-    BLOCKED = BLOCKED0
-    RUNNABLE = RUNNABLE0
-    FREE = FREE0
-    READ = READ0
-    State = BROKEN0 + BLOCKED0 + RUNNABLE0 + FREE0
-    Permission = WRITE0 + READ0
-    pid = Kernel0->0 + UserProcess0->3 + UserProcess1->2 + UserProcess2->1
-
-    address = Page0->7 + Page1->6 + Page2->5 + Page3->4 + Page4->3 + 
-    Page5->2 + Page6->1 + Page7->0
-    next = Page1->Page0 + Page2->Page1 + Page3->Page2 + Page4->Page3 + 
-    Page5->Page4 + Page6->Page5 + Page7->Page6
-    
-    // State 1
-    mapping = Pagetable3->1->Page6 + Pagetable3->2->Page5 + 
-    Pagetable3->3->Page4 + Pagetable3->4->Page3 + Pagetable3->5->Page2 + 
-    Pagetable3->6->Page1 + Pagetable3->7->Page0
-    st = Kernel0->RUNNABLE0 + UserProcess0->FREE0 +  UserProcess1->FREE0 + UserProcess2->FREE0
-    ptable = Kernel0->Pagetable3
-    permissions = Pagetable3->Page0->READ0 + Pagetable3->Page1->READ0 + Pagetable3->Page2->READ0 + 
-    Pagetable3->Page3->READ0 + Pagetable3->Page4->WRITE0 + Pagetable3->Page5->WRITE0 + Pagetable3->Page6->WRITE0
-
-    // State 2 (init UserspaceProcess0)
-    mapping' = Pagetable3->1->Page6 + Pagetable3->2->Page5 + 
-    Pagetable3->3->Page4 + Pagetable3->4->Page3 + Pagetable3->5->Page2 + 
-    Pagetable3->6->Page1 + Pagetable3->7->Page0 + Pagetable2->(1->Page3 + 2->Page2)
-    st' = Kernel0->RUNNABLE0 + UserProcess0->RUNNABLE0 +  UserProcess1->FREE0 + UserProcess2->FREE0
-    ptable'= Kernel0->Pagetable3 + UserProcess0->Pagetable2
-    permissions' = Pagetable3->Page0->READ0 + Pagetable3->Page1->READ0 + Pagetable3->Page2->READ0 + 
-    Pagetable3->Page3->READ0 + Pagetable3->Page4->WRITE0 + Pagetable3->Page5->WRITE0 + Pagetable3->Page6->WRITE0
-    + Pagetable2->(Page3->WRITE0 + Page2->WRITE0)
-
-    // State 3 (init UserspaceProcess1)
-    mapping'' = Pagetable3->1->Page6 + Pagetable3->2->Page5 + 
-    Pagetable3->3->Page4 + Pagetable3->4->Page3 + Pagetable3->5->Page2 + 
-    Pagetable3->6->Page1 + Pagetable3->7->Page0 + Pagetable2->(1->Page3 + 2->Page2)
-    + Pagetable1->(1->Page1 + 2->Page0)
-    st'' = Kernel0->RUNNABLE0 + UserProcess0->RUNNABLE0 +  UserProcess1->RUNNABLE0 + UserProcess2->FREE0
-    ptable''= Kernel0->Pagetable3 + UserProcess0->Pagetable2 + UserProcess1->Pagetable1
-    permissions'' = Pagetable3->Page0->READ0 + Pagetable3->Page1->READ0 + Pagetable3->Page2->READ0 + 
-    Pagetable3->Page3->READ0 + Pagetable3->Page4->WRITE0 + Pagetable3->Page5->WRITE0 + Pagetable3->Page6->WRITE0
-    + Pagetable2->(Page3->WRITE0 + Page2->WRITE0) + Pagetable1->(Page1->WRITE0 + Page0->WRITE0)
-
-    // State 4 (delete UserspaceProcess1)
-    mapping''' = Pagetable3->1->Page6 + Pagetable3->2->Page5 + 
-    Pagetable3->3->Page4 + Pagetable3->4->Page3 + Pagetable3->5->Page2 + 
-    Pagetable3->6->Page1 + Pagetable3->7->Page0 + Pagetable2->(1->Page3 + 2->Page2)
-    st''' = Kernel0->RUNNABLE0 + UserProcess0->RUNNABLE0 +  UserProcess1->FREE0 + UserProcess2->FREE0
-    ptable'''= Kernel0->Pagetable3 + UserProcess0->Pagetable2
-    permissions''' = Pagetable3->Page0->READ0 + Pagetable3->Page1->READ0 + Pagetable3->Page2->READ0 + 
-    Pagetable3->Page3->READ0 + Pagetable3->Page4->WRITE0 + Pagetable3->Page5->WRITE0 + Pagetable3->Page6->WRITE0
-    + Pagetable2->(Page3->WRITE0 + Page2->WRITE0)
-
-    // State 5 (delete UserspaceProcess0)
-    mapping'''' = Pagetable3->1->Page6 + Pagetable3->2->Page5 + 
-    Pagetable3->3->Page4 + Pagetable3->4->Page3 + Pagetable3->5->Page2 + 
-    Pagetable3->6->Page1 + Pagetable3->7->Page0
-    st'''' = Kernel0->RUNNABLE0 + UserProcess0->FREE0 +  UserProcess1->FREE0 + UserProcess2->FREE0
-    ptable'''' = Kernel0->Pagetable3
-    permissions'''' = Pagetable3->Page0->READ0 + Pagetable3->Page1->READ0 + Pagetable3->Page2->READ0 + 
-    Pagetable3->Page3->READ0 + Pagetable3->Page4->WRITE0 + Pagetable3->Page5->WRITE0 + Pagetable3->Page6->WRITE0
-
-} is sat 
-allocFreeMem : {
-    // Set Up
-    Process = UserProcess0 + UserProcess1 + UserProcess2 + Kernel0
-    UserProcess = UserProcess0 + UserProcess1 + UserProcess2
-    Kernel = Kernel0
-    Page = Page0 + Page1 + Page2 + Page3 + Page4 + Page5 + Page6 + Page7
-    Pagetable = Pagetable0 + Pagetable1 + Pagetable2 + Pagetable3
-    
-    BROKEN = BROKEN0
-    WRITE = WRITE0
-    BLOCKED = BLOCKED0
-    RUNNABLE = RUNNABLE0
-    FREE = FREE0
-    READ = READ0
-    State = BROKEN0 + BLOCKED0 + RUNNABLE0 + FREE0
-    Permission = WRITE0 + READ0
-    pid = Kernel0->0 + UserProcess0->3 + UserProcess1->2 + UserProcess2->1
-
-    address = Page0->7 + Page1->6 + Page2->5 + Page3->4 + Page4->3 + 
-    Page5->2 + Page6->1 + Page7->0
-    next = Page1->Page0 + Page2->Page1 + Page3->Page2 + Page4->Page3 + 
-    Page5->Page4 + Page6->Page5 + Page7->Page6
-    
-    // State 1
-    mapping = Pagetable3->1->Page6 + Pagetable3->2->Page5 + 
-    Pagetable3->3->Page4 + Pagetable3->4->Page3 + Pagetable3->5->Page2 + 
-    Pagetable3->6->Page1 + Pagetable3->7->Page0
-    st = Kernel0->RUNNABLE0 + UserProcess0->FREE0 +  UserProcess1->FREE0 + UserProcess2->FREE0
-    ptable = Kernel0->Pagetable3
-    permissions = Pagetable3->Page0->READ0 + Pagetable3->Page1->READ0 + Pagetable3->Page2->READ0 + 
-    Pagetable3->Page3->READ0 + Pagetable3->Page4->WRITE0 + Pagetable3->Page5->WRITE0 + Pagetable3->Page6->WRITE0
-
-    // State 2 (init UserspaceProcess0)
-    mapping' = Pagetable3->1->Page6 + Pagetable3->2->Page5 + 
-    Pagetable3->3->Page4 + Pagetable3->4->Page3 + Pagetable3->5->Page2 + 
-    Pagetable3->6->Page1 + Pagetable3->7->Page0 + Pagetable2->(1->Page3 + 2->Page2)
-    st' = Kernel0->RUNNABLE0 + UserProcess0->RUNNABLE0 +  UserProcess1->FREE0 + UserProcess2->FREE0
-    ptable'= Kernel0->Pagetable3 + UserProcess0->Pagetable2
-    permissions' = Pagetable3->Page0->READ0 + Pagetable3->Page1->READ0 + Pagetable3->Page2->READ0 + 
-    Pagetable3->Page3->READ0 + Pagetable3->Page4->WRITE0 + Pagetable3->Page5->WRITE0 + Pagetable3->Page6->WRITE0
-    + Pagetable2->(Page3->WRITE0 + Page2->WRITE0)
-
-    // State 3 (allocateMemory UserspaceProcess0)
-    mapping'' = Pagetable3->1->Page6 + Pagetable3->2->Page5 + 
-    Pagetable3->3->Page4 + Pagetable3->4->Page3 + Pagetable3->5->Page2 + 
-    Pagetable3->6->Page1 + Pagetable3->7->Page0 + Pagetable2->(1->Page3 + 2->Page2 + 3->Page1)
-    st'' = Kernel0->RUNNABLE0 + UserProcess0->RUNNABLE0 +  UserProcess1->FREE0 + UserProcess2->FREE0
-    ptable''= Kernel0->Pagetable3 + UserProcess0->Pagetable2
-    permissions'' = Pagetable3->Page0->READ0 + Pagetable3->Page1->READ0 + Pagetable3->Page2->READ0 + 
-    Pagetable3->Page3->READ0 + Pagetable3->Page4->WRITE0 + Pagetable3->Page5->WRITE0 + Pagetable3->Page6->WRITE0
-    + Pagetable2->(Page3->WRITE0 + Page2->WRITE0 + Page1->WRITE0)
-
-    // State 4 (allocateMemory UserspaceProcess0)
-    mapping''' = Pagetable3->1->Page6 + Pagetable3->2->Page5 + 
-    Pagetable3->3->Page4 + Pagetable3->4->Page3 + Pagetable3->5->Page2 + 
-    Pagetable3->6->Page1 + Pagetable3->7->Page0 + 
-    Pagetable2->(1->Page3 + 2->Page2 + 3->Page1 + 4->Page0)
-    st''' = Kernel0->RUNNABLE0 + UserProcess0->RUNNABLE0 +  UserProcess1->FREE0 + UserProcess2->FREE0
-    ptable'''= Kernel0->Pagetable3 + UserProcess0->Pagetable2
-    permissions''' = Pagetable3->Page0->READ0 + Pagetable3->Page1->READ0 + Pagetable3->Page2->READ0 + 
-    Pagetable3->Page3->READ0 + Pagetable3->Page4->WRITE0 + Pagetable3->Page5->WRITE0 + Pagetable3->Page6->WRITE0
-    + Pagetable2->(Page3->WRITE0 + Page2->WRITE0 + Page1->WRITE0 + Page0->WRITE0)  
-
-    // State 5 (freeMemory UserspaceProcess0)
-    mapping'''' = Pagetable3->1->Page6 + Pagetable3->2->Page5 + 
-    Pagetable3->3->Page4 + Pagetable3->4->Page3 + Pagetable3->5->Page2 + 
-    Pagetable3->6->Page1 + Pagetable3->7->Page0 + Pagetable2->(1->Page3 + 2->Page2 + 3->Page1)
-    st'''' = Kernel0->RUNNABLE0 + UserProcess0->RUNNABLE0 +  UserProcess1->FREE0 + UserProcess2->FREE0
-    ptable''''= Kernel0->Pagetable3 + UserProcess0->Pagetable2
-    permissions'''' = Pagetable3->Page0->READ0 + Pagetable3->Page1->READ0 + Pagetable3->Page2->READ0 + 
-    Pagetable3->Page3->READ0 + Pagetable3->Page4->WRITE0 + Pagetable3->Page5->WRITE0 + Pagetable3->Page6->WRITE0
-    + Pagetable2->(Page3->WRITE0 + Page2->WRITE0 + Page1->WRITE0)  
-
-    // State 6 (freeMemory UserspaceProcess0)
-    mapping''''' = Pagetable3->1->Page6 + Pagetable3->2->Page5 + 
-    Pagetable3->3->Page4 + Pagetable3->4->Page3 + Pagetable3->5->Page2 + 
-    Pagetable3->6->Page1 + Pagetable3->7->Page0 + Pagetable2->(1->Page3 + 2->Page2)
-    st''''' = Kernel0->RUNNABLE0 + UserProcess0->RUNNABLE0 +  UserProcess1->FREE0 + UserProcess2->FREE0
-    ptable''''' = Kernel0->Pagetable3 + UserProcess0->Pagetable2
-    permissions''''' = Pagetable3->Page0->READ0 + Pagetable3->Page1->READ0 + Pagetable3->Page2->READ0 + 
-    Pagetable3->Page3->READ0 + Pagetable3->Page4->WRITE0 + Pagetable3->Page5->WRITE0 + Pagetable3->Page6->WRITE0
-    + Pagetable2->(Page3->WRITE0 + Page2->WRITE0)
-} is sat
-}
+// test expect {
+//     //You can reallocate a physical page after it has been freed
+//     reallocate_pa : {
+//         some p1: UserProcess , p2 : UserProcess - p1 , a1 : Int   { 
+//             initializeProcess[p1]
+//             after allocateMemory[p1,a1]
+//             after after freeMemory[p1,a1]
+//             after after after initializeProcess[p2]
+//             after after after after allocateMemory[p1,a1]
+//         }
+//     } is sat
+//     //can't initialize an already initialized process
+//     doubleInit : {
+//         some p1 : UserProcess , a1 : Int {
+//             initializeProcess[p1]
+//             after allocateMemory[p1,a1]
+//             after after initializeProcess[p1]
+//         }
+//     } is unsat
+//     //A complex instance 
+//     sample_inst1 : {
+//         some p1: UserProcess , p2 : UserProcess - p1 , p3 : UserProcess - p1 - p2 ,a1 : Int,a2 : Int -a1 ,a3 : Int -a1 -a2   { 
+//             initializeProcess[p1]
+//             after initializeProcess[p2]
+//             after after allocateMemory[p2,a2]
+//             after after after allocateMemory[p2,a1]
+//             after after after after initializeProcess[p3]
+//             after after after after after freeMemory[p2,a1]
+//             after after after after after after allocateMemory[p1,a1]
+//             after after after after after after after deleteProcess[p3]
+//             after after after after after after after after freeMemory[p1,a1]
+//             after after after after after after after after after deleteProcess[p1]
+//             after after after after after after after after after after deleteProcess[p2]
+//         }
+//     } for exactly 8 Page, exactly 3 UserProcess ,  5 Int is sat
+ 
+// }
+pred  sample_inst1  {
+        some p1: UserProcess , p2 : UserProcess - p1 , p3 : UserProcess - p1 - p2 ,a1 : Int,a2 : Int -a1 ,a3 : Int -a1 -a2   { 
+            initializeProcess[p1]
+            after initializeProcess[p2]
+            after after allocateMemory[p2,a2]
+            after after after allocateMemory[p2,a1]
+            after after after after initializeProcess[p3]
+            after after after after after freeMemory[p2,a1]
+            after after after after after after allocateMemory[p1,a1]
+            after after after after after after after deleteProcess[p3]
+            after after after after after after after after freeMemory[p1,a1]
+            after after after after after after after after after deleteProcess[p1]
+            after after after after after after after after after after deleteProcess[p2]
+        }
+    }
+//    run{sample_inst1 and traces} for exactly 8 Page, exactly 3 UserProcess ,  5 Int 

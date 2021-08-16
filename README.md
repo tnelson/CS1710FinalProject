@@ -16,8 +16,8 @@ Fundamentally our model consists of two parts:
 On top of this we have pagetables which map virtual memory, states which capture each processes's fundamental state. 
 Notably we implemented and verified several key properties. Among our successes we count:
 1. We implemented and verified overlapping virtual memory address spaces
-2.We verified memory isolation between processes 
-3.We verified the safety of the process lifecyle 
+2. We verified memory isolation between processes 
+3. We verified the safety of the process lifecyle 
 
 ### Visualisation
 Our visualisation is a basic HTML table that displays what can be thought of as each process's "descriptor", namely, it's state, VA mappings, and permissions.

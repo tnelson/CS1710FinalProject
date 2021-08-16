@@ -20,17 +20,18 @@ Notably we implemented and verified several key properties. Among our successes 
 3.We verified the safety of the process lifecyle 
 
 ### Visualisation
-Our visualisation is a basic HTML table that displays what can be thought of as each process's ``descriptor", namely, it's state, VA mappings, and permissions.
+Our visualisation is a basic HTML table that displays what can be thought of as each process's "descriptor", namely, it's state, VA mappings, and permissions.
 
 This is also an added benefit of our model. It provides a clear and simple way to understand a complex topic that is often confusing.
 
 ## Limitations 
 We do not consider several key parts of a modern OS : 
-1.We neglect registers 
-2.We do not consider multithreading
-3.We do not model memory access (What happens when a process acceses an adress in it's VA space that has not been allocated)
+1. We neglect registers 
+2. We do not consider multithreading
+3. We do not model memory access (What happens when a process acceses an adress in it's VA space that has not been allocated)
 4. We do not consider process forking 
 This is a small subset of things we do not consider among a modern OS's powerful feature set. Indeed even the most cutting edge 
 research in the world cannot fully model/verify something as expansive as the Linux kernel.  
-##Tradeoffs
+
+## Tradeoffs
 Due to the fact that we use pages to represent our basic unit of memory we are unable to capture byte level memory errors (such as overwrites) with our model. 

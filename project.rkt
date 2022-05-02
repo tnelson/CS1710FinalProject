@@ -107,13 +107,22 @@ pred initKernelProc {
     Kernel.pid = sing[0]
     some Kernel.ptable
     // set up the kernel pagetable's mappings (identity mapping, uses 3 pages for kernel code)
+    -- Split into multiple "all"s for debugging purposes
     all pg : Page | {
         sum[pg.address] = 0 => no Kernel.ptable.mapping.pg and no Kernel.ptable.permissions[pg]
+    }
+    all pg : Page | {
         // create mapping to all physical pages (except for page 0)
         sum[pg.address] > 0 => Kernel.ptable.mapping[pg.address] = pg
+    }
+    all pg : Page | {
         some Kernel.ptable.mapping.pg=> ~(Kernel.ptable.mapping)[pg] = pg.address
+    }
+    all pg : Page | {
         // kernel code stored in first 3 pages (write permissions), read only otherwise
         sum[pg.address] > 0 and sum[pg.address] <= 3 => Kernel.ptable.permissions[pg] = WRITE
+    }
+    all pg : Page | {
         sum[pg.address] > 3 => Kernel.ptable.permissions[pg] = READ
     }
 } 
@@ -543,25 +552,41 @@ expect {
  
 // }
 
-option verbose 5
-pred  sample_inst1  {
-        some p1: UserProcess , p2 : UserProcess - p1 , p3 : UserProcess - p1 - p2 ,a1 : Int,a2 : Int -a1 ,a3 : Int -a1 -a2   { 
-            initializeProcess[p1]
-            next_state initializeProcess[p2]
-      
-      --      next_state next_state allocateMemory[p2,a2]
-      
-      --      next_state next_state next_state allocateMemory[p2,a1]
-      --      next_state next_state next_state next_state initializeProcess[p3]
-      --      next_state next_state next_state next_state next_state freeMemory[p2,a1]
-      
-      --      next_state next_state next_state next_state next_state next_state allocateMemory[p1,a1]
-      --      next_state next_state next_state next_state next_state next_state next_state deleteProcess[p3]
-      --      next_state next_state next_state next_state next_state next_state next_state next_state freeMemory[p1,a1]
-      --      next_state next_state next_state next_state next_state next_state next_state next_state next_state deleteProcess[p1]
-      --      next_state next_state next_state next_state next_state next_state next_state next_state next_state next_state deleteProcess[p2]
+pred sample_inst1  {
+        some p1: UserProcess , p2 : UserProcess - p1 , p3 : UserProcess - p1 - p2 ,a1 : Int,a2 : Int -a1 ,a3 : Int -a1 -a2   {     
+            -- This sequence requires 12 addresses!
+            -- startup uses 4 addresses (0 reserved, 1--3 to kernel)
+            initializeProcess[p1] -- uses +2 
+            next_state initializeProcess[p2] -- uses +2
+            next_state next_state allocateMemory[p2,a2] -- uses +1
+            next_state next_state next_state allocateMemory[p2,a1] -- uses +1
+            next_state next_state next_state next_state initializeProcess[p3] -- uses +2
+            next_state next_state next_state next_state next_state freeMemory[p2,a1] -- free -1      
+            next_state next_state next_state next_state next_state next_state allocateMemory[p1,a1] -- use +1
+            next_state next_state next_state next_state next_state next_state next_state deleteProcess[p3]
+            next_state next_state next_state next_state next_state next_state next_state next_state freeMemory[p1,a1]
+            next_state next_state next_state next_state next_state next_state next_state next_state next_state deleteProcess[p1]
+            next_state next_state next_state next_state next_state next_state next_state next_state next_state next_state deleteProcess[p2]
         }
 }
+
+-- Simplified to fit into 8 Pages
+pred sample_inst2  {
+        some p1: UserProcess, p2 : UserProcess - p1, a1 : Int, a2 : Int - a1  {     
+            -- startup uses 4 addresses (0 reserved, 1--3 to kernel)
+            initializeProcess[p1] -- uses +2 (6) 
+            next_state allocateMemory[p1,a2] -- uses +1 (7)
+            next_state next_state allocateMemory[p1,a1] -- uses +1 (8)
+            next_state next_state next_state freeMemory[p1, a1] -- (7)            
+            next_state next_state next_state next_state freeMemory[p1,a2] -- (6)      
+            next_state next_state next_state next_state next_state initializeProcess[p2] -- (8)
+            next_state next_state next_state next_state next_state next_state deleteProcess[p1]
+            next_state next_state next_state next_state next_state next_state next_state allocateMemory[p2,a1]
+            next_state next_state next_state next_state next_state next_state next_state next_state allocateMemory[p2,a2]
+            next_state next_state next_state next_state next_state next_state next_state next_state next_state deleteProcess[p2]
+        }
+}
+
 
 -- Reflect some of the wellformedness constraints using a partial instance
 --   * every address must be >= 0
@@ -596,10 +621,35 @@ inst invariants_optimizer_exactly8Page_exactly4Pagetable {
 
 }
 
-
 run {
-    sample_inst1 
+    sample_inst2
     traces
 } 
 for exactly 8 Page, exactly 3 UserProcess, 5 Int
 for invariants_optimizer_exactly8Page_exactly4Pagetable
+
+/*
+  Note: 
+
+  4 Int: [... 0, ..., 7]
+  5 Int: [..., 0, ..., 15]
+  exactly 8 Page, each of which has a unique (physical address)
+      4 Int suffices for that
+  Since each page is *one* address either physically or virtually,
+    4 Int suffices for 8 Page virtually, too since address 0 is
+    assigned a page yet cannot be allocated.
+
+    0 is reserved
+    Kernel gets 1, 2, and 3. 
+    Initializing a process allocates 2 each    
+    So after initializing 2 processes, there are no addresses left.   
+      And so {p: Page | next_state next_state not allocated[p]} yields {}
+
+    The page referencing physical address 0 is always allocated, and can
+      never be re-used. So even with 5 Int, a trace with 
+        - init process
+        - init process
+        - allocate memory
+      cannot be satisfied without adding additional pages, too.
+        
+*/

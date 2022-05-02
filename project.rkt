@@ -4,6 +4,7 @@
 option problem_type temporal
 option max_tracelength 14 
 
+
 /* ######################### */
 /*          SIGS             */
 /* ######################### */
@@ -80,7 +81,8 @@ pred SetupPhysicalMemory{
     }
     no(next & (~^next))
     all p : Page | {
-        one(p.next) => p.next.address = sing[add[1,sum[p.address]]]
+        -- was "one"
+        some (p.next) => p.next.address = sing[add[1,sum[p.address]]]
     }
 }
 
@@ -143,9 +145,11 @@ pred invariants {
     //No 2 procs have the same pagetable
     ptable.~ptable in iden 
     all i: Int {
-        i in Page.address => sum[i] >= 0 // physical addresses
-        i in Process.pid => sum[i] >= 0 // pids
+        i in Page.address => sum[i] >= 0 // physical addresses        
         i in Pagetable.mapping.Page => sum[i] >= 0 // Virtual addresses
+    }
+    all i: Int {
+        i in Process.pid => sum[i] >= 0 // pids
     }
     //Kernel Pagetable shouldn't change!
     (Kernel.ptable)' = Kernel.ptable
@@ -202,13 +206,15 @@ pred initializeProcess[p: Process] {
     p.st = FREE
     st' = st + p->RUNNABLE - p->FREE
     (p.st)' = RUNNABLE  
-    one pt: Pagetable{
+    -- was "one", but = prevents the need given that
+    --   this is first-order quantification (#pt = 1) 
+    some pt: Pagetable {  
         ptable' = ptable + p->pt
     }
     // allocate 2 initial pages
     // You need to refer to the next Page table ptable' not current one!
 
-    all i: Int{ // Map first two virtual addresses
+    all i: Int { // Map first two virtual addresses
         ((sum[i] = 1) or (sum[i] = 2)) => 
             {
                 one pg: Page | {
@@ -218,12 +224,12 @@ pred initializeProcess[p: Process] {
                     p.(ptable').(mapping').pg = i
                 } 
             } else {
-                no p.ptable.mapping[i]'
+                no (p.ptable.mapping[i])'
             }
     }
     //pages have permissions only if they are mapped
     all pg: Page{
-        (not (pg in p.ptable.mapping[Int]')) => no p.ptable.permissions[pg]'
+        (not (pg in (p.ptable.mapping[Int])')) => no (p.ptable.permissions[pg])'
     }
     //If a pagetable isn't bound to a particular process it should not have any mappings
     all pt : Pagetable | {
@@ -241,6 +247,10 @@ pred initializeProcess[p: Process] {
    Mapping to that address is then added to it's pagetable
 */
 pred allocateMemory[p: Process, adr: Int] {
+    -- added to avoid underconstraint where (no p.table) and thus
+    --   mapping' = mapping + p.ptable->adr->pg   is true for ALL adr.
+    some p.ptable
+
     some pg: Page {
         not allocated[pg]
         mapping' = mapping + p.ptable->adr->pg
@@ -272,9 +282,10 @@ freeMemory (from a  certain process)
 */
 
 pred moves { 
+    -- was "one" (frame conditions / = prevent multiples)
     always {
         (some p: Process - Kernel | initializeProcess[p] or deleteProcess[p]) or 
-        (some p: Process - Kernel | one adr: Int { allocateMemory[p, adr] or freeMemory[p, adr] } )
+        (some p: Process - Kernel | some adr: Int { allocateMemory[p, adr] or freeMemory[p, adr] } )
 
     }
 }
@@ -346,18 +357,18 @@ pred safety {
             some p.ptable
             some p.ptable'
             no p.ptable.mapping[adr]
-            some p.ptable.mapping[adr]'
+            some (p.ptable.mapping[adr])'
             no p.ptable.permissions[p.ptable.mapping[adr]]
-            p.ptable.permissions[p.ptable.mapping[adr]]' = WRITE
+            (p.ptable.permissions[p.ptable.mapping[adr]])' = WRITE
         }
         // if a process frees memory then these conditions should be met
         freeMemory[p, adr] => {
             some p.ptable
             some p.ptable'
             some p.ptable.mapping[adr]
-            no p.ptable.mapping[adr]'
+            no (p.ptable.mapping[adr])'
             p.ptable.permissions[p.ptable.mapping[adr]] = WRITE
-            no p.ptable.permissions[p.ptable.mapping[adr]]'
+            no (p.ptable.permissions[p.ptable.mapping[adr]])'
         }
     }
 }
@@ -446,26 +457,41 @@ Running the tests on larger bounds is possible but then each test may take upwar
 */
 
 // concrete `sat`/`unsat` testing
-test expect {
-    vacuity: {traces}  for exactly 8 Page, exactly 2 UserProcess, 4 Int  is sat
-    {traces and VASpacesCanOverlap}  for exactly 8 Page, exactly 2 UserProcess, 4 Int is sat
-    {traces and procInitializedAndDeleted}  for exactly 8 Page, exactly 2 UserProcess, 4 Int is sat
-    {traces and deletedOnceInitialized}  for exactly 8 Page, exactly 2 UserProcess, 4 Int  is sat
-    {traces and freedOnceAllocated}  for exactly 8 Page, exactly 2 UserProcess, 4 Int  is sat
-    {traces and allocateToUnititializedProc}  for exactly 8 Page, exactly 2 UserProcess, 4 Int  is unsat
-    {traces and freeFromUnititializedProc}  for exactly 8 Page, exactly 2 UserProcess, 4 Int  is unsat
-    {traces and pageAllocatedAndFreed}  for exactly 8 Page, exactly 2 UserProcess, 4 Int  is sat
-    {traces and freeFromWrongProc}  for exactly 8 Page, exactly 2 UserProcess, 4 Int  is unsat
+-- change "expect" to "test expect" to run these tests
+expect {
+    vacuity: {traces}  for exactly 8 Page, exactly 2 UserProcess, 4 Int
+       is sat
+    va_spaces_canoverlap: {traces and VASpacesCanOverlap}  for exactly 8 Page, exactly 2 UserProcess, 4 Int 
+       is sat
+    proc_init_and_del: {traces and procInitializedAndDeleted}  for exactly 8 Page, exactly 2 UserProcess, 4 Int 
+       is sat
+    del_once_init: {traces and deletedOnceInitialized}  for exactly 8 Page, exactly 2 UserProcess, 4 Int 
+       is sat
+    freed_once_alloc: {traces and freedOnceAllocated}  for exactly 8 Page, exactly 2 UserProcess, 4 Int 
+       is sat
+    alloc_to_uninit: {traces and allocateToUnititializedProc}  for exactly 8 Page, exactly 2 UserProcess, 4 Int 
+       is unsat
+    free_from_uninit: {traces and freeFromUnititializedProc}  for exactly 8 Page, exactly 2 UserProcess, 4 Int 
+       is unsat
+    page_alloc_and_freed: {traces and pageAllocatedAndFreed}  for exactly 8 Page, exactly 2 UserProcess, 4 Int 
+       is sat
+    free_from_wrong: {traces and freeFromWrongProc}  for exactly 8 Page, exactly 2 UserProcess, 4 Int 
+       is unsat
 } 
 
 
 
 // // verification `theorem` testing
-test expect {
-    isolation_: {traces => always{isolation}} for exactly 8 Page, exactly 2 UserProcess, 4 Int is theorem
-    invariance_: {traces implies always invariance} for exactly 8 Page, exactly 2 UserProcess, 4 Int  is theorem
-    safety_: {traces implies always safety} for exactly 8 Page, exactly 2 UserProcess, 4 Int  is theorem
-    isolatedVAspaces_: {traces implies always isolatedVAspaces}  for exactly 8 Page, exactly 2 UserProcess, 4 Int  is theorem
+-- change "expect" to "test expect" to run these tests
+expect {
+    isolation_: {traces => always{isolation}} for exactly 8 Page, exactly 2 UserProcess, 4 Int 
+       is theorem
+    invariance_: {traces implies always invariance} for exactly 8 Page, exactly 2 UserProcess, 4 Int 
+       is theorem
+    safety_: {traces implies always safety} for exactly 8 Page, exactly 2 UserProcess, 4 Int 
+       is theorem
+    isolatedVAspaces_: {traces implies always isolatedVAspaces}  for exactly 8 Page, exactly 2 UserProcess, 4 Int 
+       is theorem
 }
 
 // //Sanity Checks 
@@ -484,51 +510,96 @@ test expect {
 //     reallocate_pa : {
 //         some p1: UserProcess , p2 : UserProcess - p1 , a1 : Int   { 
 //             initializeProcess[p1]
-//             after allocateMemory[p1,a1]
-//             after after freeMemory[p1,a1]
-//             after after after initializeProcess[p2]
-//             after after after after allocateMemory[p1,a1]
+//             next_state allocateMemory[p1,a1]
+//             next_state next_state freeMemory[p1,a1]
+//             next_state next_state next_state initializeProcess[p2]
+//             next_state next_state next_state next_state allocateMemory[p1,a1]
 //         }
 //     } is sat
 //     //can't initialize an already initialized process
 //     doubleInit : {
 //         some p1 : UserProcess , a1 : Int {
 //             initializeProcess[p1]
-//             after allocateMemory[p1,a1]
-//             after after initializeProcess[p1]
+//             next_state allocateMemory[p1,a1]
+//             next_state next_state initializeProcess[p1]
 //         }
 //     } is unsat
 //     //A complex instance 
 //     sample_inst1 : {
 //         some p1: UserProcess , p2 : UserProcess - p1 , p3 : UserProcess - p1 - p2 ,a1 : Int,a2 : Int -a1 ,a3 : Int -a1 -a2   { 
 //             initializeProcess[p1]
-//             after initializeProcess[p2]
-//             after after allocateMemory[p2,a2]
-//             after after after allocateMemory[p2,a1]
-//             after after after after initializeProcess[p3]
-//             after after after after after freeMemory[p2,a1]
-//             after after after after after after allocateMemory[p1,a1]
-//             after after after after after after after deleteProcess[p3]
-//             after after after after after after after after freeMemory[p1,a1]
-//             after after after after after after after after after deleteProcess[p1]
-//             after after after after after after after after after after deleteProcess[p2]
+//             next_state initializeProcess[p2]
+//             next_state next_state allocateMemory[p2,a2]
+//             next_state next_state next_state allocateMemory[p2,a1]
+//             next_state next_state next_state next_state initializeProcess[p3]
+//             next_state next_state next_state next_state next_state freeMemory[p2,a1]
+//             next_state next_state next_state next_state next_state next_state allocateMemory[p1,a1]
+//             next_state next_state next_state next_state next_state next_state next_state deleteProcess[p3]
+//             next_state next_state next_state next_state next_state next_state next_state next_state freeMemory[p1,a1]
+//             next_state next_state next_state next_state next_state next_state next_state next_state next_state deleteProcess[p1]
+//             next_state next_state next_state next_state next_state next_state next_state next_state next_state next_state deleteProcess[p2]
 //         }
 //     } for exactly 8 Page, exactly 3 UserProcess ,  5 Int is sat
  
 // }
+
+option verbose 5
 pred  sample_inst1  {
         some p1: UserProcess , p2 : UserProcess - p1 , p3 : UserProcess - p1 - p2 ,a1 : Int,a2 : Int -a1 ,a3 : Int -a1 -a2   { 
             initializeProcess[p1]
-            after initializeProcess[p2]
-            after after allocateMemory[p2,a2]
-            after after after allocateMemory[p2,a1]
-            after after after after initializeProcess[p3]
-            after after after after after freeMemory[p2,a1]
-            after after after after after after allocateMemory[p1,a1]
-            after after after after after after after deleteProcess[p3]
-            after after after after after after after after freeMemory[p1,a1]
-            after after after after after after after after after deleteProcess[p1]
-            after after after after after after after after after after deleteProcess[p2]
+            next_state initializeProcess[p2]
+      
+      --      next_state next_state allocateMemory[p2,a2]
+      
+      --      next_state next_state next_state allocateMemory[p2,a1]
+      --      next_state next_state next_state next_state initializeProcess[p3]
+      --      next_state next_state next_state next_state next_state freeMemory[p2,a1]
+      
+      --      next_state next_state next_state next_state next_state next_state allocateMemory[p1,a1]
+      --      next_state next_state next_state next_state next_state next_state next_state deleteProcess[p3]
+      --      next_state next_state next_state next_state next_state next_state next_state next_state freeMemory[p1,a1]
+      --      next_state next_state next_state next_state next_state next_state next_state next_state next_state deleteProcess[p1]
+      --      next_state next_state next_state next_state next_state next_state next_state next_state next_state next_state deleteProcess[p2]
         }
-    }
-//    run{sample_inst1 and traces} for exactly 8 Page, exactly 3 UserProcess ,  5 Int 
+}
+
+-- Reflect some of the wellformedness constraints using a partial instance
+--   * every address must be >= 0
+--   * every PID must be >= 0
+-- Limitations: at the moment, Forge cannot support upper-bounding
+--   a field without bounding its sig. Numeric scopes won't suffice.
+--   So we need to give an explicit upper-bound for (e.g.) Page.
+inst invariants_optimizer_exactly8Page_exactly4Pagetable {
+--    H = `H0
+--    ADDRESSES = H -> (0 + 1 + 2 + 3 + 4 + 5 + 6 + 7)
+--    PIDS = H -> (0 + 1 + 2 + 3)
+
+    Page = `Page0 + `Page1 + `Page2 + `Page3 + 
+           `Page4 + `Page5 + `Page6 + `Page7  
+    -- We could upper-bound address only...
+    --address = Page -> (0 + 1 + 2 + 3 + 4 + 5 + 6 + 7)   
+    -- But given the SetupPhysicalMemory predicate, exact seems right:
+    address = `Page0->0 + `Page1->1 + `Page2->2 + `Page3->3 + 
+              `Page4->4 + `Page5->5 + `Page6->6 + `Page7->7
+    next = `Page0->`Page1 + `Page1->`Page2 + `Page2->`Page3 + `Page3->`Page4 + 
+           `Page4->`Page5 + `Page5->`Page6 + `Page6->`Page7
+    
+    -- The numeric bound on Pagetable wasn't exact before. However,
+    --   Forge (at the moment) requires Pagetable to be exact-bounded here:
+    -- Still useful to eliminate the negative int values from mapping
+    -- NOTE WELL: bounds in an Electrum context apply to ALL STATES
+    --   (This is why "example" tests aren't advised in Electrum mode)
+    Pagetable = `Pagetable0 + `Pagetable1 + `Pagetable2 + `Pagetable3
+    mapping in Pagetable -> (0 + 1 + 2 + 3 + 4 + 5 + 6 + 7) -> Page
+
+    -- Could also remove negatives from pid
+
+}
+
+
+run {
+    sample_inst1 
+    traces
+} 
+for exactly 8 Page, exactly 3 UserProcess, 5 Int
+for invariants_optimizer_exactly8Page_exactly4Pagetable

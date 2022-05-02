@@ -1,9 +1,10 @@
-//Get all the data out of Sterling
-var stage =  document.getElementsByClassName("script-stage")[1];
+// Updated for 2022 Sterling
+// Click the `div` button at the top of script view to 
+//   put the `div` variable in scope.
+
 const allinst = instances.map(instanceToGraph)
 const numinst = instances.length - 1
-var maindiv = getElem("stagediv","div")
-stage.appendChild(maindiv); 
+var maindiv = div 
 
 const clear = () => maindiv.innerHTML = ''
 clear()
